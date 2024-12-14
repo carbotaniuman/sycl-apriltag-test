@@ -1,0 +1,74 @@
+This is an AprilTags implementation designed to run on GPUs with OpenCL via SYCL.
+The targetted platform is Rusticl, which should be standards-compliant enough
+to allow this code to run on most OpenCL 3.0 implementations.
+
+For now, we assume that OpenCL gets access to an `Image2D` of some sort that
+represents the RGB(A) values of our incoming image.
+
+AprilTag detection has roughly the following steps. Implementation notes are
+provided next to each step.
+
+Our constraints for image processing will be an 8192x8192 image pre-decimation
+and an 4096x4096 image post decimation. This ensures we can index each image
+with 12 bits per coordinate and also ensures that our segmentation hash map
+with size 2^16 stays at a reasonable load factor. In order to simply segmentation,
+we will also require the image size post-decimation to be even in both the
+X and Y dimension.
+
+1. Remove Colors
+2. Decimate
+
+Ignored for now, presumably handled by OpenGL?
+
+clang-format -style=file -i src/* include/*
+
+. /opt/intel/oneapi/setvars.sh intel64
+
+intel-oneapi-compiler-dpcpp-cpp
+
+export LD_PRELOAD=/home/quydx/code/opencl-intercept-layer/install/lib/libOpenCL.so
+export CLI_Emulate_cl_intel_unified_shared_memory=1
+export CLI_SuppressLogging=1
+
+```
+cl::Platform underlying_platform;
+cl::Device underlying_device;
+{
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    std::cout << "Found " << platforms.size() << " platforms." << std::endl;
+
+    cl::Platform plat;
+    for (auto &p : platforms) {
+        std::string name = p.getInfo<CL_PLATFORM_NAME>();
+        std::string platver = p.getInfo<CL_PLATFORM_VERSION>();
+        std::cout << "A " << name << " B " << platver << std::endl;
+        if (platver.find("OpenCL 3.") != std::string::npos) {
+            plat = p;
+        }
+    }
+
+    if (plat() == 0) {
+        std::cout << "No OpenCL 3.0 or newer platform found." << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::vector<cl::Device> devices;
+    plat.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+    if (devices.size() == 0) {
+        std::cout << "No Rusticl devices found." << std::endl;
+        exit(1);
+    }
+
+    std::cout << "Found " << devices.size() << " devices." << std::endl;
+
+    std::cout << "Using device: "<< devices[0].getInfo<CL_DEVICE_NAME>() << std::endl;
+
+    underlying_platform = plat;
+    underlying_device = devices[0];
+}
+```
+sudo rm /var/lib/dpkg/info/intel-oneapi-runtime-opencl.prerm
+sudo apt install intel-oneapi-runtime-opencl
+sudo apt remove intel-oneapi-runtime-opencl
+sudo apt remove mesa-opencl-icd
