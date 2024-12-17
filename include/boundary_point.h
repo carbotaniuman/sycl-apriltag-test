@@ -39,7 +39,9 @@ struct BoundaryPoint {
     uint16_t second_blob;
 
     uint32_t blob_label() const { return (first_blob << 16) | second_blob; }
-    bool is_black_to_white() const { return y & COORDINATE_COLOR_DIRECTION_MASK; }
+    bool is_black_to_white() const {
+        return y & COORDINATE_COLOR_DIRECTION_MASK;
+    }
 
     uint16_t x_value() const { return x & COORDINATE_VALUE_MASK; }
     uint16_t y_value() const { return y & COORDINATE_VALUE_MASK; }
@@ -48,10 +50,7 @@ struct BoundaryPoint {
     uint16_t y_with_dy() const { return 2 * y_value() + dy(); }
 
     float calc_theta(float cx, float cy) const {
-        float quadrants[2][2] = {
-            {-1 * (1 << 16), 1 << 17},
-            {0, 1 << 16}
-        };
+        float quadrants[2][2] = {{-1 * (1 << 16), 1 << 17}, {0, 1 << 16}};
 
         float dx = static_cast<float>(x_with_dx()) - cx;
         float dy = static_cast<float>(y_with_dy()) - cy;
@@ -66,43 +65,51 @@ struct BoundaryPoint {
 
     int16_t dx() const {
         switch (extract_half_pixel(x)) {
-            case HalfPixel::TOP_LEFT: return -1;
-            case HalfPixel::TOP: return 0;
-            case HalfPixel::LEFT: return -1;
-            case HalfPixel::BOTTOM_LEFT: return 0;
-            default: return 0;
+        case HalfPixel::TOP_LEFT:
+            return -1;
+        case HalfPixel::TOP:
+            return 0;
+        case HalfPixel::LEFT:
+            return -1;
+        case HalfPixel::BOTTOM_LEFT:
+            return 0;
+        default:
+            return 0;
         }
     }
 
     int16_t dy() const {
         switch (extract_half_pixel(x)) {
-            case HalfPixel::TOP_LEFT: return -1;
-            case HalfPixel::TOP: return -1;
-            case HalfPixel::LEFT: return 0;
-            case HalfPixel::BOTTOM_LEFT: return 1;
-            default: return 0;
+        case HalfPixel::TOP_LEFT:
+            return -1;
+        case HalfPixel::TOP:
+            return -1;
+        case HalfPixel::LEFT:
+            return 0;
+        case HalfPixel::BOTTOM_LEFT:
+            return 1;
+        default:
+            return 0;
         }
     }
 
-    int16_t gx() const {
-        return is_black_to_white() ? dx() : -dx();
-    }
+    int16_t gx() const { return is_black_to_white() ? dx() : -dx(); }
 
-    int16_t gy() const {
-        return is_black_to_white() ? dy() : -dy();
-    }
+    int16_t gy() const { return is_black_to_white() ? dy() : -dy(); }
 
     bool operator==(const BoundaryPoint &) const = default;
     // auto operator<=>(const BoundaryPoint &other) const {
     //     auto left =
-    //         std::make_tuple(first_blob, second_blob, x & COORDINATE_VALUE_MASK,
+    //         std::make_tuple(first_blob, second_blob, x &
+    //         COORDINATE_VALUE_MASK,
     //                         y & COORDINATE_VALUE_MASK, extract_half_pixel(x),
     //                         y & COORDINATE_COLOR_DIRECTION_MASK);
     //     auto right = std::make_tuple(other.first_blob, other.second_blob,
     //                                  other.x & COORDINATE_VALUE_MASK,
     //                                  other.y & COORDINATE_VALUE_MASK,
     //                                  extract_half_pixel(other.x),
-    //                                  other.y & COORDINATE_COLOR_DIRECTION_MASK);
+    //                                  other.y &
+    //                                  COORDINATE_COLOR_DIRECTION_MASK);
     //     return left <=> right;
     // }
 };
@@ -116,7 +123,9 @@ struct ClusterPoint {
     uint16_t y;
     float slope;
 
-    bool is_black_to_white() const { return y & COORDINATE_COLOR_DIRECTION_MASK; }
+    bool is_black_to_white() const {
+        return y & COORDINATE_COLOR_DIRECTION_MASK;
+    }
 
     uint16_t x_value() const { return x & COORDINATE_VALUE_MASK; }
     uint16_t y_value() const { return y & COORDINATE_VALUE_MASK; }
@@ -126,30 +135,36 @@ struct ClusterPoint {
 
     int16_t dx() const {
         switch (extract_half_pixel(x)) {
-            case HalfPixel::TOP_LEFT: return -1;
-            case HalfPixel::TOP: return 0;
-            case HalfPixel::LEFT: return -1;
-            case HalfPixel::BOTTOM_LEFT: return 0;
-            default: return 0;
+        case HalfPixel::TOP_LEFT:
+            return -1;
+        case HalfPixel::TOP:
+            return 0;
+        case HalfPixel::LEFT:
+            return -1;
+        case HalfPixel::BOTTOM_LEFT:
+            return 0;
+        default:
+            return 0;
         }
     }
 
     int16_t dy() const {
         switch (extract_half_pixel(x)) {
-            case HalfPixel::TOP_LEFT: return -1;
-            case HalfPixel::TOP: return -1;
-            case HalfPixel::LEFT: return 0;
-            case HalfPixel::BOTTOM_LEFT: return 1;
-            default: return 0;
+        case HalfPixel::TOP_LEFT:
+            return -1;
+        case HalfPixel::TOP:
+            return -1;
+        case HalfPixel::LEFT:
+            return 0;
+        case HalfPixel::BOTTOM_LEFT:
+            return 1;
+        default:
+            return 0;
         }
     }
 
-    int16_t gx() const {
-        return is_black_to_white() ? dx() : -dx();
-    }
+    int16_t gx() const { return is_black_to_white() ? dx() : -dx(); }
 
-    int16_t gy() const {
-        return is_black_to_white() ? dy() : -dy();
-    }
+    int16_t gy() const { return is_black_to_white() ? dy() : -dy(); }
 };
 #endif

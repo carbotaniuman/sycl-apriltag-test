@@ -5,9 +5,10 @@
 
 #include "cluster_bounds.h"
 #include "find_boundaries.h"
+#include "fit_quad.h"
+#include "line_fit_point.h"
 #include "segmentation.h"
 #include "threshold.h"
-#include "line_fit_point.h"
 
 #include <oneapi/dpl/algorithm>
 #include <oneapi/dpl/execution>
@@ -38,8 +39,9 @@ int main(int argc, char *argv[]) {
 
     auto copy_image = q.copy(data, grayscale_buffer, width * height);
 
-    auto threshold = threshold_image(q, grayscale_buffer, extrema_buffer,
-                               thresholded_buffer, width, height, {copy_image});
+    auto threshold =
+        threshold_image(q, grayscale_buffer, extrema_buffer, thresholded_buffer,
+                        width, height, {copy_image});
 
     {
         auto output = new uint8_t[width * height];
@@ -54,11 +56,14 @@ int main(int argc, char *argv[]) {
     size_t sizes_elems = 1 << 16;
     auto sizes_buffer = sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
 
-    auto zero_labels = q.memset(label_buffer, 0, width * height * sizeof(uint32_t));
-    auto zero_sizes = q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
+    auto zero_labels =
+        q.memset(label_buffer, 0, width * height * sizeof(uint32_t));
+    auto zero_sizes =
+        q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
 
     auto segment = image_segmentation(q, thresholded_buffer, label_buffer,
-                                      sizes_buffer, sizes_elems, width, height, {threshold, zero_labels, zero_sizes});
+                                      sizes_buffer, sizes_elems, width, height,
+                                      {threshold, zero_labels, zero_sizes});
 
     {
         auto labels_out = new uint32_t[width * height];
@@ -106,11 +111,12 @@ int main(int argc, char *argv[]) {
 
     auto points_buffer =
         sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
-    auto zero_points = q.memset(points_buffer, 0,
-             width * height * 4 * sizeof(BoundaryPoint));
+    auto zero_points =
+        q.memset(points_buffer, 0, width * height * 4 * sizeof(BoundaryPoint));
 
-    auto boundaries = find_boundaries(q, label_buffer, sizes_buffer, 1 << 16,
-                                      points_buffer, width, height, {segment, zero_points});
+    auto boundaries =
+        find_boundaries(q, label_buffer, sizes_buffer, 1 << 16, points_buffer,
+                        width, height, {segment, zero_points});
 
     {
         auto points_out = new BoundaryPoint[width * height * 4]();
@@ -120,8 +126,10 @@ int main(int argc, char *argv[]) {
         size_t present = 0;
         size_t zeroes = 0;
         for (size_t i = 0; i < width * height * 4; i++) {
-            // std::cout << "x " << points_out[i].x << " y " << points_out[i].y << std::endl;
-            if (points_out[i] == sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
+            // std::cout << "x " << points_out[i].x << " y " << points_out[i].y
+            // << std::endl;
+            if (points_out[i] ==
+                sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
                 zeroes++;
                 continue;
             }
@@ -133,15 +141,20 @@ int main(int argc, char *argv[]) {
     }
     boundaries.wait();
 
-    auto compacted_points = sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
+    auto compacted_points =
+        sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
 
-    auto compacted_points_end = oneapi::dpl::copy_if(policy_e, points_buffer, points_buffer + width * height * 4, compacted_points, [](BoundaryPoint p) {
-        return p != sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0));
-    });
-    oneapi::dpl::sort(policy_e, compacted_points, compacted_points_end, [](const auto& left, const auto& right) {
-        return left.blob_label() < right.blob_label();
-    });
-    auto compacted_points_count = std::distance(compacted_points, compacted_points_end);
+    auto compacted_points_end = oneapi::dpl::copy_if(
+        policy_e, points_buffer, points_buffer + width * height * 4,
+        compacted_points, [](BoundaryPoint p) {
+            return p != sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0));
+        });
+    oneapi::dpl::sort(policy_e, compacted_points, compacted_points_end,
+                      [](const auto &left, const auto &right) {
+                          return left.blob_label() < right.blob_label();
+                      });
+    auto compacted_points_count =
+        std::distance(compacted_points, compacted_points_end);
 
     std::cout << "compacted points was " << compacted_points_count << std::endl;
     {
@@ -154,8 +167,7 @@ int main(int argc, char *argv[]) {
         uint8_t *cluster_image = new uint8_t[width * height * 3]();
         std::unordered_map<uint32_t, uint32_t> vs{};
         for (size_t i = 0; i < compacted_points_count; i++) {
-            if (points_out[i].x == 0 &&
-                points_out[i].y == 0) {
+            if (points_out[i].x == 0 && points_out[i].y == 0) {
                 break;
             }
 
@@ -187,7 +199,7 @@ int main(int argc, char *argv[]) {
             cluster_image[(y * width + x) * 3 + 2] = b;
         }
         stbi_write_png("clusters.png", width, height, 3, cluster_image,
-                    width * 3);
+                       width * 3);
     }
 
     auto transform_keys = dpl::make_transform_iterator(
@@ -196,47 +208,56 @@ int main(int argc, char *argv[]) {
     auto transform_values = dpl::make_transform_iterator(
         dpl::make_zip_iterator(compacted_points,
                                dpl::counting_iterator<uint32_t>(0)),
-        [](auto a) { return ClusterBounds::inital_from_point(std::get<0>(a), std::get<1>(a)); });
+        [](auto a) {
+            return ClusterBounds::inital_from_point(std::get<0>(a),
+                                                    std::get<1>(a));
+        });
 
     auto values_buffer = sycl::malloc_shared<ClusterBounds>(1 << 16, q);
 
     auto [keys_end, values_end] = oneapi::dpl::reduce_by_segment(
-        policy_e, transform_keys,
-        transform_keys + compacted_points_count, transform_values, oneapi::dpl::discard_iterator(),
-        values_buffer, std::equal_to<>(), reduce_bounds);
+        policy_e, transform_keys, transform_keys + compacted_points_count,
+        transform_values, oneapi::dpl::discard_iterator(), values_buffer,
+        std::equal_to<>(), reduce_bounds);
 
-    std::cout << "Compacted this many bounds " << std::distance(values_buffer, values_end) << std::endl;
+    std::cout << "Compacted this many bounds "
+              << std::distance(values_buffer, values_end) << std::endl;
 
     // {
     //     size_t unfiltered_point_count = 0;
     //     for (auto a = values_buffer; a != values_end; a++) {
-    //         std::cout << "i " << std::distance(values_buffer, a) << std::endl;
-    //         std::cout << "start " << a->start << std::endl;
+    //         std::cout << "i " << std::distance(values_buffer, a) <<
+    //         std::endl; std::cout << "start " << a->start << std::endl;
     //         std::cout << "count " << a->count << std::endl;
     //         std::cout << "x_min " << a->x_min << std::endl;
     //         std::cout << "x_max " << a->x_max << std::endl;
     //         std::cout << "y_min " << a->y_min << std::endl;
     //         std::cout << "y_max " << a->y_max << std::endl;
-            
+
     //         unfiltered_point_count += a->count;
     //     }
-    //     std::cout << "before filtering count is " << unfiltered_point_count << std::endl;
+    //     std::cout << "before filtering count is " << unfiltered_point_count
+    //     << std::endl;
     // }
 
     auto valid_blob_filter = ValidBlobFilter();
 
-    auto filtered_values_buffer = sycl::malloc_shared<ClusterBounds>(1 << 16, q);
-    auto filtered_values_end = oneapi::dpl::copy_if(policy_e,
-        values_buffer, values_end, filtered_values_buffer,
-        valid_blob_filter);
+    auto filtered_values_buffer =
+        sycl::malloc_shared<ClusterBounds>(1 << 16, q);
+    auto filtered_values_end =
+        oneapi::dpl::copy_if(policy_e, values_buffer, values_end,
+                             filtered_values_buffer, valid_blob_filter);
 
-    std::cout << "filtered distance is " << std::distance(filtered_values_buffer, filtered_values_end) << std::endl;
+    std::cout << "filtered distance is "
+              << std::distance(filtered_values_buffer, filtered_values_end)
+              << std::endl;
 
     // {
     //     size_t filtered_point_count = 0;
-    //     for (auto a = filtered_values_buffer; a != filtered_values_end; a++) {
-    //         std::cout << "i " << std::distance(filtered_values_buffer, a) << std::endl;
-    //         std::cout << "start " << a->start << std::endl;
+    //     for (auto a = filtered_values_buffer; a != filtered_values_end; a++)
+    //     {
+    //         std::cout << "i " << std::distance(filtered_values_buffer, a) <<
+    //         std::endl; std::cout << "start " << a->start << std::endl;
     //         std::cout << "count " << a->count << std::endl;
     //         std::cout << "x_min " << a->x_min << std::endl;
     //         std::cout << "x_max " << a->x_max << std::endl;
@@ -244,74 +265,119 @@ int main(int argc, char *argv[]) {
     //         std::cout << "y_max " << a->y_max << std::endl;
     //         filtered_point_count += a->count;
     //     }
-    //     std::cout << "after filtering count is " << filtered_point_count << std::endl;
+    //     std::cout << "after filtering count is " << filtered_point_count <<
+    //     std::endl;
     // }
 
-    auto filtered_cluster_indexes = sycl::malloc_shared<uint16_t>(width * height * 4, q);
-    auto filtered_cluster_points = sycl::malloc_shared<ClusterPoint>(width * height * 4, q);
+    auto filtered_cluster_indexes =
+        sycl::malloc_shared<uint16_t>(width * height * 4, q);
+    auto filtered_cluster_points =
+        sycl::malloc_shared<ClusterPoint>(width * height * 4, q);
 
     auto transformed_to_cluster_points = oneapi::dpl::make_transform_iterator(
-        oneapi::dpl::make_zip_iterator(compacted_points, oneapi::dpl::counting_iterator<uint32_t>(0)),
+        oneapi::dpl::make_zip_iterator(
+            compacted_points, oneapi::dpl::counting_iterator<uint32_t>(0)),
         [filtered_values_buffer, filtered_values_end](auto a) {
             uint32_t i = std::get<1>(a);
 
-            auto found_iter = oneapi::dpl::lower_bound(filtered_values_buffer, filtered_values_end, i,
-            [](ClusterBounds a, uint32_t b) {
-                if ((a.start + a.count) <= b) {
-                    return true;
-                }
-                return false;
-            });
+            auto found_iter = oneapi::dpl::lower_bound(
+                filtered_values_buffer, filtered_values_end, i,
+                [](ClusterBounds a, uint32_t b) {
+                    if ((a.start + a.count) <= b) {
+                        return true;
+                    }
+                    return false;
+                });
 
             if (found_iter == filtered_values_end) {
-                return std::make_tuple(ClusterPoint(), std::numeric_limits<uint16_t>::max());
+                return std::make_tuple(ClusterPoint(),
+                                       std::numeric_limits<uint16_t>::max());
             }
 
-            const auto& cluster = *found_iter;
+            const auto &cluster = *found_iter;
 
             if (i < cluster.start || i >= (cluster.start + cluster.count)) {
-                return std::make_tuple(ClusterPoint(), std::numeric_limits<uint16_t>::max());
+                return std::make_tuple(ClusterPoint(),
+                                       std::numeric_limits<uint16_t>::max());
             }
 
             auto dist = std::distance(filtered_values_buffer, found_iter);
 
             BoundaryPoint p = std::get<0>(a);
 
-            return std::make_tuple(ClusterPoint(p.x, p.y, p.calc_theta(cluster.cx(), cluster.cy())), static_cast<uint16_t>(dist));
+            return std::make_tuple(
+                ClusterPoint(p.x, p.y,
+                             p.calc_theta(cluster.cx(), cluster.cy())),
+                static_cast<uint16_t>(dist));
         });
 
-    auto o_zipped_iterator = oneapi::dpl::make_zip_iterator(filtered_cluster_points, filtered_cluster_indexes);
+    auto o_zipped_iterator = oneapi::dpl::make_zip_iterator(
+        filtered_cluster_points, filtered_cluster_indexes);
 
-    auto o_zipped_end = oneapi::dpl::copy_if(policy_e, transformed_to_cluster_points, transformed_to_cluster_points + compacted_points_count, o_zipped_iterator, [values_buffer](const auto& p) {
-        if (std::get<1>(p) == std::numeric_limits<uint16_t>::max()) {
-            return false;
+    auto o_zipped_end = oneapi::dpl::copy_if(
+        policy_e, transformed_to_cluster_points,
+        transformed_to_cluster_points + compacted_points_count,
+        o_zipped_iterator, [values_buffer](const auto &p) {
+            if (std::get<1>(p) == std::numeric_limits<uint16_t>::max()) {
+                return false;
+            }
+            return true;
+        });
+
+    auto rewritten_filtered_values_buffer =
+        sycl::malloc_shared<ClusterExtents>(1 << 16, q);
+    oneapi::dpl::transform_inclusive_scan(
+        policy_e, filtered_values_buffer, filtered_values_end,
+        rewritten_filtered_values_buffer,
+        [](const ClusterExtents &left, const ClusterExtents &right) {
+            return ClusterExtents(left.start + left.count, right.count);
+        },
+        [](const ClusterBounds &a) { return ClusterExtents(0, a.count); },
+        ClusterExtents(0, 0));
+
+    {
+        for (int i = 0; i < 5; i++) {
+            std::cout << "!!!" << std::endl;
+            std::cout << "old s " << filtered_values_buffer[i].start
+                      << std::endl;
+            std::cout << "old c " << filtered_values_buffer[i].count
+                      << std::endl;
+            std::cout << "new c " << rewritten_filtered_values_buffer[i].start
+                      << std::endl;
+            std::cout << "new c " << rewritten_filtered_values_buffer[i].count
+                      << std::endl;
         }
-        return true;
-    });
+    }
 
-    oneapi::dpl::sort(policy_e, o_zipped_iterator, o_zipped_end, [](const auto& left, const auto& right) {
-        uint32_t l_index = std::get<1>(left);
-        uint32_t r_index = std::get<1>(right);
+    oneapi::dpl::sort(policy_e, o_zipped_iterator, o_zipped_end,
+                      [](const auto &left, const auto &right) {
+                          uint32_t l_index = std::get<1>(left);
+                          uint32_t r_index = std::get<1>(right);
 
-        if (l_index != r_index) {
-            return l_index < r_index;
-        }
+                          if (l_index != r_index) {
+                              return l_index < r_index;
+                          }
 
-        auto& l_point = std::get<0>(left);
-        auto& r_point = std::get<0>(right);
+                          auto &l_point = std::get<0>(left);
+                          auto &r_point = std::get<0>(right);
 
-        return l_point.slope < r_point.slope;
-    });
+                          return l_point.slope < r_point.slope;
+                      });
 
     auto filtered_points_count = std::distance(o_zipped_iterator, o_zipped_end);
 
-    auto line_fit_points_buffer = sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
+    auto line_fit_points_buffer =
+        sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
 
-    auto transformed_to_linefit_points = oneapi::dpl::make_transform_iterator(filtered_cluster_points, [width, height, grayscale_buffer](const ClusterPoint& a) {
-        return compute_initial_linefit(a, width, height, grayscale_buffer);
-    });
+    auto transformed_to_linefit_points = oneapi::dpl::make_transform_iterator(
+        filtered_cluster_points,
+        [width, height, grayscale_buffer](const ClusterPoint &a) {
+            return compute_initial_linefit(a, width, height, grayscale_buffer);
+        });
 
-    oneapi::dpl::inclusive_scan_by_segment(policy_e, filtered_cluster_indexes, filtered_cluster_indexes + filtered_points_count,
+    oneapi::dpl::inclusive_scan_by_segment(
+        policy_e, filtered_cluster_indexes,
+        filtered_cluster_indexes + filtered_points_count,
         transformed_to_linefit_points, line_fit_points_buffer);
 
     {
@@ -322,5 +388,21 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // oneapi::dpl::copy_if(policy_e, );
+    auto found_peaks_buffer = sycl::malloc_shared<Peak>(width * height * 4, q);
+    q.memset(found_peaks_buffer, 0, width * height * 4 * sizeof(Peak)).wait();
+
+    fit_lines_test2(q, line_fit_points_buffer, filtered_cluster_indexes, rewritten_filtered_values_buffer, filtered_points_count, found_peaks_buffer);
+
+    auto compacted_peaks =
+        sycl::malloc_shared<Peak>(width * height * 4, q);
+
+    auto compacted_peaks_end = oneapi::dpl::copy_if(
+        policy_e, found_peaks_buffer, found_peaks_buffer + width * height * 4,
+        compacted_peaks, [](const Peak& p) {
+            return p.error != 0;
+        });
+
+    std::cout << "compacted peak distance is "
+              << std::distance(compacted_peaks, compacted_peaks_end)
+              << std::endl;
 }

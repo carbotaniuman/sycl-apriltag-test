@@ -12,7 +12,7 @@ find_package(AdaptiveCpp CONFIG REQUIRED)
 # find_package(OpenCL REQUIRED)
 
 # Add a library
-add_executable(sycl_apriltag_test src/main.cpp src/segmentation.cpp src/find_boundaries.cpp src/threshold.cpp src/image_impl.cpp)
+add_executable(sycl_apriltag_test src/main.cpp src/segmentation.cpp src/find_boundaries.cpp src/fit_quad.cpp src/threshold.cpp src/image_impl.cpp)
 target_include_directories(sycl_apriltag_test PUBLIC include)
 target_compile_features(sycl_apriltag_test PRIVATE cxx_std_20)
 # target_link_libraries(sycl_apriltag_test TBB::tbb OpenCL::OpenCL)

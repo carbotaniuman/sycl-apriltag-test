@@ -6,6 +6,11 @@
 
 #include "boundary_point.h"
 
+struct ClusterExtents {
+    uint32_t start;
+    uint32_t count;
+};
+
 struct ClusterBounds {
     uint16_t x_min;
     uint16_t x_max;
@@ -21,7 +26,7 @@ struct ClusterBounds {
     uint32_t count;
 
     static ClusterBounds inital_from_point(BoundaryPoint p, uint32_t start) {
-        return ClusterBounds {
+        return ClusterBounds{
             p.x_value(),
             p.x_value(),
             p.y_value(),
@@ -30,21 +35,18 @@ struct ClusterBounds {
             p.gx(),
             p.gy(),
 
-            static_cast<int64_t>(p.x_with_dx()) * static_cast<int64_t>(p.gx())
-                + static_cast<int64_t>(p.y_with_dy()) * static_cast<int64_t>(p.gy()),
+            static_cast<int64_t>(p.x_with_dx()) * static_cast<int64_t>(p.gx()) +
+                static_cast<int64_t>(p.y_with_dy()) *
+                    static_cast<int64_t>(p.gy()),
 
             start,
             1,
         };
     }
 
-    float cx() const {
-        return (x_min + x_max) * 0.5f + 0.05118;
-    }
+    float cx() const { return (x_min + x_max) * 0.5f + 0.05118; }
 
-    float cy() const {
-        return (y_min + y_max) * 0.5f + -0.028581;
-    }
+    float cy() const { return (y_min + y_max) * 0.5f + -0.028581; }
 
     float dot() const {
         // dx = x - cx
@@ -53,16 +55,18 @@ struct ClusterBounds {
         //
         // dot = sum((x - cx) * gx + (y - cy) * gy)
 
-        float cx_cy_contrib = ((x_min + x_max) * gx_sum + (y_min + y_max) * gy_sum) * 0.5;
+        float cx_cy_contrib =
+            ((x_min + x_max) * gx_sum + (y_min + y_max) * gy_sum) * 0.5;
 
         float gx_contrib = 0.05118 * static_cast<float>(gx_sum);
         float gy_contrib = 0.028581 * static_cast<float>(gy_sum);
 
-        return 2 * static_cast<float>(pxgx_pygy_sum) - cx_cy_contrib - gx_contrib - gy_contrib;
+        return 2 * static_cast<float>(pxgx_pygy_sum) - cx_cy_contrib -
+               gx_contrib - gy_contrib;
     }
 };
 
-ClusterBounds reduce_bounds(const ClusterBounds &a, const ClusterBounds &b) {
+inline ClusterBounds reduce_bounds(const ClusterBounds &a, const ClusterBounds &b) {
     ClusterBounds out;
     out.x_min = std::min(a.x_min, b.x_min);
     out.x_max = std::max(a.x_max, b.x_max);
@@ -73,18 +77,18 @@ ClusterBounds reduce_bounds(const ClusterBounds &a, const ClusterBounds &b) {
     out.pxgx_pygy_sum = a.pxgx_pygy_sum + b.pxgx_pygy_sum;
     out.gx_sum = a.gx_sum + b.gx_sum;
     out.gy_sum = a.gy_sum + b.gy_sum;
-    
+
     return out;
 }
 
 struct ValidBlobFilter {
     size_t tag_width = 4;
     size_t min_cluster_pixels = 5;
-    size_t max_cluster_pixels = 2*(2*420+2*312);
+    size_t max_cluster_pixels = 2 * (2 * 420 + 2 * 312);
     bool normal_border = true;
     bool reversed_border = false;
 
-    bool operator()(const ClusterBounds& b) const {
+    bool operator()(const ClusterBounds &b) const {
         if (b.count < min_cluster_pixels) {
             return false;
         }
