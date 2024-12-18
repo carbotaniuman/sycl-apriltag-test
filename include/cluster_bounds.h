@@ -66,7 +66,8 @@ struct ClusterBounds {
     }
 };
 
-inline ClusterBounds reduce_bounds(const ClusterBounds &a, const ClusterBounds &b) {
+inline ClusterBounds reduce_bounds(const ClusterBounds &a,
+                                   const ClusterBounds &b) {
     ClusterBounds out;
     out.x_min = std::min(a.x_min, b.x_min);
     out.x_max = std::max(a.x_max, b.x_max);

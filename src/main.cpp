@@ -1,3 +1,4 @@
+#include "combinadics.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -248,8 +249,10 @@ int main(int argc, char *argv[]) {
         oneapi::dpl::copy_if(policy_e, values_buffer, values_end,
                              filtered_values_buffer, valid_blob_filter);
 
-    std::cout << "filtered distance is "
-              << std::distance(filtered_values_buffer, filtered_values_end)
+    size_t filtered_values_distance =
+        std::distance(filtered_values_buffer, filtered_values_end);
+
+    std::cout << "filtered distance is " << filtered_values_distance
               << std::endl;
 
     // {
@@ -335,19 +338,21 @@ int main(int argc, char *argv[]) {
         [](const ClusterBounds &a) { return ClusterExtents(0, a.count); },
         ClusterExtents(0, 0));
 
-    {
-        for (int i = 0; i < 5; i++) {
-            std::cout << "!!!" << std::endl;
-            std::cout << "old s " << filtered_values_buffer[i].start
-                      << std::endl;
-            std::cout << "old c " << filtered_values_buffer[i].count
-                      << std::endl;
-            std::cout << "new c " << rewritten_filtered_values_buffer[i].start
-                      << std::endl;
-            std::cout << "new c " << rewritten_filtered_values_buffer[i].count
-                      << std::endl;
-        }
-    }
+    // {
+    //     for (int i = 0; i < 5; i++) {
+    //         std::cout << "!!!" << std::endl;
+    //         std::cout << "old s " << filtered_values_buffer[i].start
+    //                   << std::endl;
+    //         std::cout << "old c " << filtered_values_buffer[i].count
+    //                   << std::endl;
+    //         std::cout << "new c " <<
+    //         rewritten_filtered_values_buffer[i].start
+    //                   << std::endl;
+    //         std::cout << "new c " <<
+    //         rewritten_filtered_values_buffer[i].count
+    //                   << std::endl;
+    //     }
+    // }
 
     oneapi::dpl::sort(policy_e, o_zipped_iterator, o_zipped_end,
                       [](const auto &left, const auto &right) {
@@ -375,34 +380,117 @@ int main(int argc, char *argv[]) {
             return compute_initial_linefit(a, width, height, grayscale_buffer);
         });
 
-    oneapi::dpl::inclusive_scan_by_segment(
+    auto asdasd = oneapi::dpl::inclusive_scan_by_segment(
         policy_e, filtered_cluster_indexes,
         filtered_cluster_indexes + filtered_points_count,
         transformed_to_linefit_points, line_fit_points_buffer);
 
-    {
-        for (int i = 0; i < 50; i++) {
-            std::cout << "i " << i << std::endl;
-            std::cout << transformed_to_linefit_points[i].W << std::endl;
-            std::cout << line_fit_points_buffer[i].W << std::endl;
+    // {
+    //     for (int i = 0; i < 10; i++) {
+    //         std::cout << "i " << i << std::endl;
+    //         std::cout << transformed_to_linefit_points[i].W << std::endl;
+    //         std::cout << line_fit_points_buffer[i].W << std::endl;
+    //     }
+    // }
+
+    // std::cout << "test tt" << std::distance(line_fit_points_buffer, asdasd)
+    // << std::endl;
+
+    auto found_corners_buffer =
+        sycl::malloc_shared<Corner>(width * height * 4, q);
+    q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner))
+        .wait();
+
+    int good_count = 0;
+    double *question = new double[24];
+    for (int i = 0; i < filtered_values_distance; i++) {
+        auto cluster = rewritten_filtered_values_buffer[i];
+        auto old_count = good_count;
+
+        double *temp = new double[cluster.count]();
+
+        for (int j = 0; j < cluster.count; j++) {
+            size_t k_size = std::min(static_cast<size_t>(20),
+                                     static_cast<size_t>(cluster.count / 12));
+            size_t i0 = (j + cluster.count - k_size) % cluster.count;
+            size_t i1 = (j + k_size) % cluster.count;
+
+            // This feels optimizable
+            auto [moment, num_in_moment] = get_moment(
+                line_fit_points_buffer + cluster.start, cluster.count, i0, i1);
+            fit_line(moment, num_in_moment, nullptr, &temp[j], nullptr);
         }
+
+        constexpr std::array<float, 7> FILTER_DATA = {
+            0x1.6c0504p-7, 0x1.152aaap-3, 0x1.368b3p-1, 0x1p+0,
+            0x1.368b3p-1,  0x1.152aaap-3, 0x1.6c0504p-7};
+
+        double *temp2 = new double[cluster.count]();
+        for (int j = 0; j < cluster.count; j++) {
+            double acc = 0.0;
+            for (int k = 0; k < 7; k++) {
+                size_t ind = (j + cluster.count + k - 3) % cluster.count;
+                acc += temp[ind] * FILTER_DATA[k];
+            }
+            temp2[j] = acc;
+        }
+
+        for (int j = 0; j < cluster.count; j++) {
+            size_t bef = (j + cluster.count - 1) % cluster.count;
+            size_t aft = (j + 1) % cluster.count;
+
+            if (temp2[j] > temp2[bef] && temp2[j] > temp2[aft]) {
+                good_count++;
+            }
+        }
+        std::cout << "index " << i << "has size" << cluster.count
+                  << " with good count " << (good_count - old_count)
+                  << std::endl;
     }
 
-    auto found_peaks_buffer = sycl::malloc_shared<Peak>(width * height * 4, q);
-    q.memset(found_peaks_buffer, 0, width * height * 4 * sizeof(Peak)).wait();
+    double *test2 = new double;
 
-    fit_lines_test2(q, line_fit_points_buffer, filtered_cluster_indexes, rewritten_filtered_values_buffer, filtered_points_count, found_peaks_buffer);
+    fit_lines(q, line_fit_points_buffer, filtered_cluster_indexes,
+              rewritten_filtered_values_buffer, filtered_points_count,
+              found_corners_buffer, test2);
 
-    auto compacted_peaks =
-        sycl::malloc_shared<Peak>(width * height * 4, q);
+    auto compacted_corners = sycl::malloc_shared<Corner>(width * height * 4, q);
 
-    auto compacted_peaks_end = oneapi::dpl::copy_if(
-        policy_e, found_peaks_buffer, found_peaks_buffer + width * height * 4,
-        compacted_peaks, [](const Peak& p) {
-            return p.error != 0;
-        });
+    auto compacted_corners_end = oneapi::dpl::copy_if(
+        policy_e, found_corners_buffer,
+        found_corners_buffer + width * height * 4, compacted_corners,
+        [](const Corner &p) { return p.error != 0; });
 
-    std::cout << "compacted peak distance is "
-              << std::distance(compacted_peaks, compacted_peaks_end)
+    {
+        int ll = 0;
+        int lcount = 0;
+
+        for (auto a = compacted_corners; a != compacted_corners_end; a++) {
+            if (a->cluster_index == ll) {
+                lcount++;
+            } else {
+                std::cout << "index " << ll << " had count " << lcount
+                          << std::endl;
+                ll = a->cluster_index;
+                lcount = 1;
+            }
+        }
+        std::cout << "index " << ll << " had count " << lcount << std::endl;
+    }
+
+    oneapi::dpl::sort(policy_e, compacted_corners, compacted_corners_end,
+                      [](const auto &left, const auto &right) {
+                          if (left.cluster_index != right.cluster_index) {
+                              return left.cluster_index < right.cluster_index;
+                          }
+                          return left.error < right.error;
+                      });
+
+    std::cout << "compacted corner distance is "
+              << std::distance(compacted_corners, compacted_corners_end)
               << std::endl;
+
+    std::cout << "good(?) distance is " << good_count << std::endl;
+
+    Combinadics<uint8_t, 15, 4, 16> combinadics{};
 }

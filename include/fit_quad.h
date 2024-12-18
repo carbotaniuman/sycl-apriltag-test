@@ -6,13 +6,22 @@
 #include "cluster_bounds.h"
 #include "line_fit_point.h"
 
-struct Peak {
+struct Corner {
     double error;
     uint32_t line_fit_point_index;
     uint16_t cluster_index;
 };
 
-void fit_lines_test2(sycl::queue &q, const LineFitPoint *points,
-const uint16_t *cluster_indices, const ClusterExtents *cluster_extents, size_t points_size, Peak *found_peaks);
+std::tuple<LineFitPoint, size_t> get_moment(const LineFitPoint *points,
+                                            size_t points_size, size_t i0,
+                                            size_t i1);
+
+void fit_line(LineFitPoint moment, size_t num_in_moment, double *line_params,
+              double *err, double *mse);
+
+void fit_lines(sycl::queue &q, const LineFitPoint *points,
+               const uint16_t *cluster_indices,
+               const ClusterExtents *cluster_extents, size_t points_size,
+               Corner *found_corners, double *test);
 
 #endif
