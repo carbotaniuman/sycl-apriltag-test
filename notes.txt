@@ -68,3 +68,7 @@ cl::Device underlying_device;
     underlying_device = devices[0];
 }
 ```
+sudo rm /var/lib/dpkg/info/intel-oneapi-runtime-opencl.prerm
+sudo apt install intel-oneapi-runtime-opencl
+sudo apt remove intel-oneapi-runtime-opencl
+sudo apt remove mesa-opencl-icd
