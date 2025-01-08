@@ -222,7 +222,7 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
                      size_t their_linear_id = local_linear_id;
 
                      // Check before us.
-                     if (local_linear_id > END_OFFSET) {
+                     if (local_linear_id >= END_OFFSET) {
                          // Only if the indices are not the same
                          if (local_cluster_indices[local_linear_id -
                                                    END_OFFSET] !=
