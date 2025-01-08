@@ -38,7 +38,7 @@ public:
 
             if (auto next = ref.load(); next != n) {
                 n = next;
-                orig.store(n);
+                orig.fetch_min(n);
             } else {
                 break;
             }
@@ -51,8 +51,8 @@ public:
         bool done = false;
 
         while (true) {
-            a = find(a);
-            b = find(b);
+            a = find_compress(a);
+            b = find_compress(b);
 
             if (a < b) {
                 atomic_elem_ref ref{m_buffer[b]};
