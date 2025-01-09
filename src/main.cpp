@@ -851,7 +851,7 @@ int main(int argc, char *argv[]) {
         //           << " line fit points count " << line_fit_points_count
         //           << std::endl;
 
-        q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner))
+        q.memset(found_corners_buffer, 0, width * height * sizeof(Corner))
             .wait();
 
         fit_lines(q, line_fit_points_buffer, filtered_cluster_indexes,
