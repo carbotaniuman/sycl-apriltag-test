@@ -803,12 +803,12 @@ int main(int argc, char *argv[]) {
                                filtered_points_count, "out6a.csv");
     }
 
-    auto asdasd_begin = line_fit_points_buffer;
+    auto asdasd_begin = reinterpret_cast<sycl::vec<double, 8>*>(line_fit_points_buffer);
 
     auto asdasd_end = oneapi::dpl::inclusive_scan_by_segment(
         policy_e, filtered_cluster_indexes,
         filtered_cluster_indexes + filtered_points_count,
-        pre_line_fit_points_buffer, asdasd_begin);
+        reinterpret_cast<sycl::vec<double, 8>*>(pre_line_fit_points_buffer), asdasd_begin);
     
     if (prog) {
         std::cout << 11 << std::endl;
