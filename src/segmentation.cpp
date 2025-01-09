@@ -312,7 +312,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
     // track of the amount of pixels in each label. This also allows
     // us to compact the label ids a little bit.
     auto final_labelling_event = q.parallel_for(
-        sycl::range(height, width / 2), compression_event,
+        sycl::range(height / 2, width / 2), compression_event,
         [label_scratch, labels, sizes, sizes_elem](sycl::item<2> it) {
             HashTable table{sizes, sizes_elem};
             size_t width = it.get_range(1) * 2;
