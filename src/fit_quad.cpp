@@ -484,14 +484,15 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      params01[2] * params12[2] + params01[3] * params12[3];
 
                  is_valid_fit &= std::fabs(dot) <= cos_critical_rad;
-                //  if (false) {
-                //      std::cout << cluster_id << "!" << combination_number
-                //                << std::endl;
-                //      std::cout << test0 << " " << test1 << " " << test2 << " "
-                //                << test3 << std::endl;
-                //      std::cout << dot << " " << cos_critical_rad << " "
-                //                << is_valid_fit << std::endl;
-                //  }
+                 //  if (false) {
+                 //      std::cout << cluster_id << "!" << combination_number
+                 //                << std::endl;
+                 //      std::cout << test0 << " " << test1 << " " << test2 << "
+                 //      "
+                 //                << test3 << std::endl;
+                 //      std::cout << dot << " " << cos_critical_rad << " "
+                 //                << is_valid_fit << std::endl;
+                 //  }
              }
 
              double current_err = is_valid_fit
