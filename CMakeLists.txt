@@ -19,7 +19,7 @@ target_compile_options(sycl_apriltag_test
   PRIVATE -fsycl -fsycl-targets=x86_64,nvptx64-nvidia-cuda
 )
 target_link_options(sycl_apriltag_test
-  PRIVATE -fsycl
+  PRIVATE -fsycl -fsycl-targets=x86_64,nvptx64-nvidia-cuda
 )
 target_link_libraries(sycl_apriltag_test PRIVATE oneDPL)
 add_sycl_to_target(TARGET sycl_apriltag_test SOURCES src/main.cpp src/find_boundaries.cpp src/segmentation.cpp src/threshold.cpp)
