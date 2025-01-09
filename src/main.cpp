@@ -312,6 +312,7 @@ int main(int argc, char *argv[]) {
         auto threshold =
             threshold_image(q, grayscale_buffer, extrema_buffer,
                             thresholded_buffer, width, height, {copy_image});
+        threshold.wait();
 
         if (prog) {
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
@@ -336,6 +337,7 @@ int main(int argc, char *argv[]) {
         auto segment = image_segmentation(
             q, thresholded_buffer, label_buffer, sizes_buffer, sizes_elems,
             width, height, {threshold, zero_labels, zero_sizes});
+        segment.wait();
 
         if (prog) {
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
@@ -393,6 +395,7 @@ int main(int argc, char *argv[]) {
         auto boundaries = find_boundaries(q, label_buffer, sizes_buffer,
                                           1 << 16, points_buffer, width, height,
                                           {segment, zero_points});
+        boundaries.wait();
 
         if (prog) {
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
@@ -439,7 +442,6 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        boundaries.wait();
         auto compacted_points_end = oneapi::dpl::copy_if(
             policy_e, points_buffer, points_buffer + width * height * 4,
             compacted_points, [](BoundaryPoint p) {
