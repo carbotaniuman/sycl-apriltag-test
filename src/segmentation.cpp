@@ -93,7 +93,7 @@ internal_compress_labels(sycl::queue &q, uint32_t *labels, size_t width,
 // kernel args should half height and width of images:
 // top left of each 2x2 block
 sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
-                               uint32_t *label_scratch, uint32_t labels, HashTable::Entry *sizes,
+                               uint32_t *label_scratch, uint32_t *labels, HashTable::Entry *sizes,
                                size_t sizes_elem, size_t width, size_t height,
                                const std::vector<sycl::event> &deps) {
     // This is the `INITIALIZATION` step of the BKE algorithm.
@@ -261,7 +261,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
 
     // Addtional premerge `COMPRESSION` step.
     auto pre_compression_event =
-        internal_compress_labels(q, labels, width, height, {init_event});
+        internal_compress_labels(q, label_scratch, width, height, {init_event});
 
     // This is the `MERGE` step of the BKE algorithm.
     auto merge_event = q.parallel_for(
@@ -305,7 +305,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
 
     // This is the `COMPRESSION` step of the BKE algorithm.
     auto compression_event =
-        internal_compress_labels(q, labels, width, height, {merge_event});
+        internal_compress_labels(q, label_scratch, width, height, {merge_event});
 
     // This is the `FINAL_LABELLING` step of the BKE algorithm.
     // This is extended from traditional BKE in order to also keep
