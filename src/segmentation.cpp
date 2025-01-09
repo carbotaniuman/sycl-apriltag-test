@@ -326,8 +326,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             uint32_t label_255 = label_scratch[image_linear_id];
             uint32_t label_0 = label_scratch[image_linear_id + 1];
 
-            uint16_t information_byte =
-                static_cast<uint16_t>(label_scratch[image_linear_id + width]);
+            uint16_t information_byte = 0b1111111111111111;
 
             uint32_t count_255 =
                 sycl::popcount(information_byte & BkeBitmap::BITMASK_POS_255);
