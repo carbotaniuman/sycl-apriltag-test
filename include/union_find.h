@@ -51,8 +51,8 @@ public:
         bool done = false;
 
         while (true) {
-            a = find_compress(a);
-            b = find_compress(b);
+            a = find(a);
+            b = find(b);
 
             if (a < b) {
                 atomic_elem_ref ref{m_buffer[b]};
