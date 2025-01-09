@@ -346,7 +346,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            auto labels_out = new uint32_t[width * height];
+            auto labels_out = new uint16_t[width * height];
             auto sizes_out = new HashTable::Entry[sizes_elems];
 
             q.copy(label_buffer, labels_out, width * height, segment);
