@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
             sycl::malloc_shared<uint8_t>(width * height, q);
 
         auto scratch_label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
-        auto label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
+        auto label_buffer = sycl::malloc_shared<uint16_t>(width * height, q);
         size_t sizes_elems = 1 << 16;
         auto sizes_buffer =
             sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
@@ -331,7 +331,7 @@ int main(int argc, char *argv[]) {
         }
 
         auto zero_labels =
-            q.memset(label_buffer, 0, width * height * sizeof(uint32_t));
+            q.memset(label_buffer, 0, width * height * sizeof(uint16_t));
         auto zero_sizes =
             q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
 

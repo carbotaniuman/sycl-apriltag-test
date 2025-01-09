@@ -93,7 +93,7 @@ internal_compress_labels(sycl::queue &q, uint32_t *labels, size_t width,
 // kernel args should half height and width of images:
 // top left of each 2x2 block
 sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
-                               uint32_t *label_scratch, uint32_t *labels, HashTable::Entry *sizes,
+                               uint32_t *label_scratch, uint16_t *labels, HashTable::Entry *sizes,
                                size_t sizes_elem, size_t width, size_t height,
                                const std::vector<sycl::event> &deps) {
     // This is the `INITIALIZATION` step of the BKE algorithm.
@@ -312,14 +312,14 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
     // track of the amount of pixels in each label. This also allows
     // us to compact the label ids a little bit.
     auto final_labelling_event = q.parallel_for(
-        sycl::range(height / 2, width / 2), compression_event,
+        sycl::range(height, width / 2), compression_event,
         [label_scratch, labels, sizes, sizes_elem](sycl::item<2> it) {
             HashTable table{sizes, sizes_elem};
             size_t width = it.get_range(1) * 2;
-            size_t height = it.get_range(0) * 2;
+            size_t height = it.get_range(0);
 
             size_t x = it.get_id(1) * 2;
-            size_t y = it.get_id(0) * 2;
+            size_t y = it.get_id(0);
 
             size_t image_linear_id = y * width + x;
 
@@ -342,38 +342,38 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                                                                       count_0);
             }
 
-            // if (information_byte & BkeBitmap::TOP_LEFT_255) {
-            //     labels[image_linear_id] = LABEL_PIXEL_MASK | label_255;
-            // } else if (information_byte & BkeBitmap::TOP_LEFT_0) {
-            //     labels[image_linear_id] = label_0;
-            // } else {
-            //     labels[image_linear_id] = 0;
-            // }
+            if (information_byte & BkeBitmap::TOP_LEFT_255) {
+                labels[image_linear_id] = LABEL_PIXEL_MASK | label_255;
+            } else if (information_byte & BkeBitmap::TOP_LEFT_0) {
+                labels[image_linear_id] = label_0;
+            } else {
+                labels[image_linear_id] = 0;
+            }
 
-            // if (information_byte & BkeBitmap::TOP_RIGHT_255) {
-            //     labels[image_linear_id + 1] = LABEL_PIXEL_MASK | label_255;
-            // } else if (information_byte & BkeBitmap::TOP_RIGHT_0) {
-            //     labels[image_linear_id + 1] = label_0;
-            // } else {
-            //     labels[image_linear_id + 1] = 0;
-            // }
+            if (information_byte & BkeBitmap::TOP_RIGHT_255) {
+                labels[image_linear_id + 1] = LABEL_PIXEL_MASK | label_255;
+            } else if (information_byte & BkeBitmap::TOP_RIGHT_0) {
+                labels[image_linear_id + 1] = label_0;
+            } else {
+                labels[image_linear_id + 1] = 0;
+            }
 
-            // if (information_byte & BkeBitmap::BOTTOM_LEFT_255) {
-            //     labels[image_linear_id + width] = LABEL_PIXEL_MASK | label_255;
-            // } else if (information_byte & BkeBitmap::BOTTOM_LEFT_0) {
-            //     labels[image_linear_id + width] = label_0;
-            // } else {
-            //     labels[image_linear_id + width] = 0;
-            // }
+            if (information_byte & BkeBitmap::BOTTOM_LEFT_255) {
+                labels[image_linear_id + width] = LABEL_PIXEL_MASK | label_255;
+            } else if (information_byte & BkeBitmap::BOTTOM_LEFT_0) {
+                labels[image_linear_id + width] = label_0;
+            } else {
+                labels[image_linear_id + width] = 0;
+            }
 
-            // if (information_byte & BkeBitmap::BOTTOM_RIGHT_255) {
-            //     labels[image_linear_id + width + 1] =
-            //         LABEL_PIXEL_MASK | label_255;
-            // } else if (information_byte & BkeBitmap::BOTTOM_RIGHT_0) {
-            //     labels[image_linear_id + width + 1] = label_0;
-            // } else {
-            //     labels[image_linear_id + width + 1] = 0;
-            // }
+            if (information_byte & BkeBitmap::BOTTOM_RIGHT_255) {
+                labels[image_linear_id + width + 1] =
+                    LABEL_PIXEL_MASK | label_255;
+            } else if (information_byte & BkeBitmap::BOTTOM_RIGHT_0) {
+                labels[image_linear_id + width + 1] = label_0;
+            } else {
+                labels[image_linear_id + width + 1] = 0;
+            }
         });
 
     return final_labelling_event;
