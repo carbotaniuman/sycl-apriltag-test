@@ -7,7 +7,7 @@
 // format. Instead of using a hashmap, the labels are concatenated
 // along with the data.
 
-sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
+sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
                             const HashTable::Entry *sizes, size_t sizes_elems,
                             BoundaryPoint *points, size_t width, size_t height,
                             const std::vector<sycl::event> &deps) {
@@ -20,7 +20,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
     // user code.
     auto init_event = q.submit([=](sycl::handler &h) {
         h.depends_on(deps);
-        sycl::local_accessor<uint32_t, 2> shared_labels{sycl::range(3, 4), h};
+        sycl::local_accessor<uint16_t, 2> shared_labels{sycl::range(3, 4), h};
 
         h.parallel_for(
             sycl::nd_range(sycl::range(height * 3 / 2, width * 2),

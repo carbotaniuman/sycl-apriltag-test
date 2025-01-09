@@ -25,7 +25,7 @@ public:
     // A zeroed buffer represents an empty map.
     // The 0th entry will never be be initialized.
     // Elems must be a power of 2
-    HashTable(Entry *buffer, size_t elems = 1 << 16)
+    HashTable(Entry *buffer, size_t elems = 1 << 15)
         : m_buffer(buffer), m_elems(elems) {}
 
     // Non-atomic, not suited for concurrent use with `insert`

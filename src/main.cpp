@@ -263,14 +263,18 @@ int main(int argc, char *argv[]) {
     fprintf(stdout, "width: %d, height: %d, comp: %d\n", width, height, comp);
 
         auto grayscale_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
-    auto extrema_buffer =
-        sycl::malloc_shared<sycl::vec<uint8_t, 2>>(width / 4 * height / 4, q);
-    auto thresholded_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
 
-    auto label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
-    size_t sizes_elems = 1 << 16;
-    auto sizes_buffer = sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
-    
+        auto extrema_buffer = sycl::malloc_shared<sycl::vec<uint8_t, 2>>(
+            width / 4 * height / 4, q);
+        auto thresholded_buffer =
+            sycl::malloc_shared<uint8_t>(width * height, q);
+
+        auto scratch_label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
+        auto label_buffer = sycl::malloc_shared<uint16_t>(width * height, q);
+        size_t sizes_elems = 1 << 15;
+        auto sizes_buffer =
+            sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
+
     auto points_buffer =
         sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
     
@@ -325,16 +329,16 @@ int main(int argc, char *argv[]) {
         stbi_write_png("thresholded.png", width, height, 1, output, width * 1);
     }
 
-
-
+    auto zero_scratch_labels =
+        q.memset(scratch_label_buffer, 0, width * height * sizeof(uint32_t));
     auto zero_labels =
-        q.memset(label_buffer, 0, width * height * sizeof(uint32_t));
+        q.memset(label_buffer, 0, width * height * sizeof(uint16_t));
     auto zero_sizes =
         q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
 
-    auto segment = image_segmentation(q, thresholded_buffer, label_buffer,
+    auto segment = image_segmentation(q, thresholded_buffer, scratch_label_buffer, label_buffer,
                                       sizes_buffer, sizes_elems, width, height,
-                                      {threshold, zero_labels, zero_sizes});
+                                      {threshold, zero_scratch_labels, zero_labels, zero_sizes});
     segment.wait();
 
     if (prog) {
@@ -343,7 +347,7 @@ int main(int argc, char *argv[]) {
     }
     
     if (debug) {
-        auto labels_out = new uint32_t[width * height];
+        auto labels_out = new uint16_t[width * height];
         auto sizes_out = new HashTable::Entry[sizes_elems];
 
         q.copy(label_buffer, labels_out, width * height, segment);
