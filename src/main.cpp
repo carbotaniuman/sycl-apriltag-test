@@ -14,14 +14,14 @@
 #include <oneapi/dpl/execution>
 #include <oneapi/dpl/iterator>
 
-#include <hipSYCL/algorithms/algorithm.hpp>
-
 #include <algorithm>
 #include <cassert>
 #include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <chrono>
+
 
 void image_u8_draw_line(uint8_t *im, float x0, float y0, float x1, float y1,
                         int width, int height) {
@@ -234,7 +234,7 @@ void dumpClusterPointsToCSV(const ClusterPoint *boundaryPoints, size_t size,
 }
 
 int main(int argc, char *argv[]) {
-
+    bool debug = false;
     sycl::queue q;
     if (argc == 1) {
         q = sycl::queue{sycl::cpu_selector_v,
@@ -243,10 +243,8 @@ int main(int argc, char *argv[]) {
         q = sycl::queue{sycl::default_selector_v,
                         sycl::property::queue::in_order{}};
     }
-    acpp::algorithms::util::allocation_cache alloc_cache{
-        acpp::algorithms::util::allocation_type::device};
 
-    auto policy_d = oneapi::dpl::execution::make_device_policy(q);
+    // auto policy_e = oneapi::dpl::execution::make_device_policy(q);
     auto policy_e = oneapi::dpl::execution::par_unseq;
 
     std::cout << "Local memory size: "
@@ -257,25 +255,61 @@ int main(int argc, char *argv[]) {
               << q.get_device().get_info<sycl::info::device::name>()
               << std::endl;
 
-    int width, height, comp;
+    for (int i = 0; i < 10; i++) {
+        int width, height, comp;
     stbi_uc *data =
         stbi_load("../decimate.png", &width, &height, &comp, STBI_grey);
     fprintf(stdout, "width: %d, height: %d, comp: %d\n", width, height, comp);
 
-    auto grayscale_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
+        auto grayscale_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
     auto extrema_buffer =
         sycl::malloc_shared<sycl::vec<uint8_t, 2>>(width / 4 * height / 4, q);
     auto thresholded_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
 
-    auto copy_image = q.copy(data, grayscale_buffer, width * height);
+    auto label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
+    size_t sizes_elems = 1 << 16;
+    auto sizes_buffer = sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
+    
+    auto points_buffer =
+        sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
+    
+        auto compacted_points =
+        sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
 
-    std::cout << "A1" << std::endl;
+    size_t *compacted_points_count_ptr = sycl::malloc_shared<size_t>(1, q);
+
+    auto trash_keys_buffer = sycl::malloc_shared<uint32_t>(1 << 16, q);
+    auto values_buffer = sycl::malloc_shared<ClusterBounds>(1 << 16, q);
+    auto filtered_values_buffer =
+        sycl::malloc_shared<ClusterBounds>(1 << 16, q);
+    auto filtered_cluster_indexes =
+        sycl::malloc_shared<uint16_t>(width * height * 4, q);
+    auto filtered_cluster_points =
+        sycl::malloc_shared<ClusterPoint>(width * height * 4, q);
+    auto rewritten_filtered_values_buffer =
+        sycl::malloc_shared<ClusterExtents>(1 << 16, q);
+
+    auto pre_line_fit_points_buffer =
+        sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
+
+    auto line_fit_points_buffer =
+        sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
+    auto found_corners_buffer =
+        sycl::malloc_shared<Corner>(width * height * 4, q);
+    auto compacted_corners = sycl::malloc_shared<Corner>(width * height * 4, q);
+    auto cluster_data_new_buffer =
+        sycl::malloc_shared<PeakExtents>(width * height, q);
+    auto output_quads = sycl::malloc_shared<FittedQuad>(width * height, q);
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    auto copy_image = q.copy(data, grayscale_buffer, width * height);
 
     auto threshold =
         threshold_image(q, grayscale_buffer, extrema_buffer, thresholded_buffer,
                         width, height, {copy_image});
 
-    {
+    if (debug) {
         auto output = new uint8_t[width * height];
 
         q.copy(thresholded_buffer, output, width * height, threshold);
@@ -284,9 +318,7 @@ int main(int argc, char *argv[]) {
         stbi_write_png("thresholded.png", width, height, 1, output, width * 1);
     }
 
-    auto label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
-    size_t sizes_elems = 1 << 16;
-    auto sizes_buffer = sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
+
 
     auto zero_labels =
         q.memset(label_buffer, 0, width * height * sizeof(uint32_t));
@@ -297,9 +329,7 @@ int main(int argc, char *argv[]) {
                                       sizes_buffer, sizes_elems, width, height,
                                       {threshold, zero_labels, zero_sizes});
 
-    std::cout << "A2" << std::endl;
-
-    {
+    if (debug) {
         auto labels_out = new uint32_t[width * height];
         auto sizes_out = new HashTable::Entry[sizes_elems];
 
@@ -343,8 +373,6 @@ int main(int argc, char *argv[]) {
         stbi_write_png("segmented.png", width, height, 3, images, width * 3);
     }
 
-    auto points_buffer =
-        sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
     auto zero_points =
         q.memset(points_buffer, 0, width * height * 4 * sizeof(BoundaryPoint));
 
@@ -352,9 +380,7 @@ int main(int argc, char *argv[]) {
         find_boundaries(q, label_buffer, sizes_buffer, 1 << 16, points_buffer,
                         width, height, {segment, zero_points});
 
-    std::cout << "A3" << std::endl;
-
-    {
+    if (debug) {
         auto points_out = new BoundaryPoint[width * height * 4]();
         q.copy(points_buffer, points_out, width * height * 4, boundaries);
         q.wait();
@@ -362,8 +388,6 @@ int main(int argc, char *argv[]) {
         size_t present = 0;
         size_t zeroes = 0;
         for (size_t i = 0; i < width * height * 4; i++) {
-            // std::cout << "x " << points_out[i].x << " y " << points_out[i].y
-            // << std::endl;
             if (points_out[i] ==
                 sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
                 zeroes++;
@@ -396,27 +420,23 @@ int main(int argc, char *argv[]) {
                        width * 3);
     }
 
-    auto compacted_points =
-        sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
 
-    acpp::algorithms::util::allocation_group compacted_points_scratch{
-        &alloc_cache, q.get_device()};
-    size_t *compacted_points_count_ptr = sycl::malloc_shared<size_t>(1, q);
-    auto compacted_points_event = acpp::algorithms::copy_if(
-        q, compacted_points_scratch, points_buffer,
+
+    boundaries.wait();
+    auto compacted_points_end = oneapi::dpl::copy_if(
+        policy_e, points_buffer,
         points_buffer + width * height * 4, compacted_points,
         [](BoundaryPoint p) {
             return p != sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0));
-        },
-        compacted_points_count_ptr, {boundaries});
-    compacted_points_event.wait();
+        });
+    
+    size_t compacted_points_count = std::distance(compacted_points, compacted_points_end);
 
-    size_t compacted_points_count = *compacted_points_count_ptr;
 
-    dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
-                            "out1.csv");
+    if (debug) {
+        dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
+                                "out1.csv");
 
-    {
         uint8_t *cluster_image = new uint8_t[width * height * 3]();
         for (size_t i = 0; i < compacted_points_count; i++) {
             if (compacted_points[i] ==
@@ -438,19 +458,16 @@ int main(int argc, char *argv[]) {
                        width * 3);
     }
 
-    auto sort_compacted_points_event = acpp::algorithms::sort(
-        q, compacted_points, compacted_points + compacted_points_count,
+    oneapi::dpl::sort(
+        policy_e, compacted_points, compacted_points + compacted_points_count,
         [](const auto &left, const auto &right) {
             return left.blob_label() < right.blob_label();
         });
-    sort_compacted_points_event.wait();
 
-    dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
-                            "out2.csv");
+    if (debug) {
+        dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
+                                "out2.csv");
 
-    std::cout << "compacted points was " << compacted_points_count << std::endl;
-
-    {
         auto points_out = new BoundaryPoint[compacted_points_count]();
         q.copy(compacted_points, points_out, compacted_points_count);
         q.wait();
@@ -501,8 +518,6 @@ int main(int argc, char *argv[]) {
                                                     std::get<1>(a));
         });
 
-    auto trash_keys_buffer = sycl::malloc_shared<uint32_t>(1 << 16, q);
-    auto values_buffer = sycl::malloc_shared<ClusterBounds>(1 << 16, q);
 
     auto values_start = values_buffer;
     auto [keys_end, values_end] = oneapi::dpl::reduce_by_segment(
@@ -512,14 +527,13 @@ int main(int argc, char *argv[]) {
             return reduce_bounds(left, right);
         });
 
-    std::cout << "Compacted this many bounds "
-              << std::distance(values_start, values_end) << std::endl;
+    if (debug) {
+        dumpClusterBoundsToCSV(values_start,
+                               std::distance(values_start, values_end),
+                               "out2bounds.csv");
+    }
 
-    dumpClusterBoundsToCSV(values_start,
-                           std::distance(values_start, values_end),
-                           "out2bounds.csv");
-
-    {
+    if (false) {
         std::filesystem::create_directories("clusters");
         for (size_t i = 0; i < std::distance(values_start, values_end); i++) {
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
@@ -586,27 +600,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // {
-    //     size_t unfiltered_point_count = 0;
-    //     for (auto a = values_buffer; a != values_end; a++) {
-    //         std::cout << "i " << std::distance(values_buffer, a) <<
-    //         std::endl; std::cout << "start " << a->start << std::endl;
-    //         std::cout << "count " << a->count << std::endl;
-    //         std::cout << "x_min " << a->x_min << std::endl;
-    //         std::cout << "x_max " << a->x_max << std::endl;
-    //         std::cout << "y_min " << a->y_min << std::endl;
-    //         std::cout << "y_max " << a->y_max << std::endl;
-
-    //         unfiltered_point_count += a->count;
-    //     }
-    //     std::cout << "before filtering count is " << unfiltered_point_count
-    //     << std::endl;
-    // }
-
     auto valid_blob_filter = ValidBlobFilter();
 
-    auto filtered_values_buffer =
-        sycl::malloc_shared<ClusterBounds>(1 << 16, q);
     auto filtered_values_end = oneapi::dpl::copy_if(
         policy_e, values_buffer,
         values_buffer + std::distance(values_start, values_end),
@@ -614,31 +609,6 @@ int main(int argc, char *argv[]) {
 
     size_t filtered_values_distance =
         std::distance(filtered_values_buffer, filtered_values_end);
-
-    std::cout << "filtered distance is " << filtered_values_distance
-              << std::endl;
-
-    // {
-    //     size_t filtered_point_count = 0;
-    //     for (auto a = filtered_values_buffer; a != filtered_values_end; a++)
-    //     {
-    //         std::cout << "i " << std::distance(filtered_values_buffer, a) <<
-    //         std::endl; std::cout << "start " << a->start << std::endl;
-    //         std::cout << "count " << a->count << std::endl;
-    //         std::cout << "x_min " << a->x_min << std::endl;
-    //         std::cout << "x_max " << a->x_max << std::endl;
-    //         std::cout << "y_min " << a->y_min << std::endl;
-    //         std::cout << "y_max " << a->y_max << std::endl;
-    //         filtered_point_count += a->count;
-    //     }
-    //     std::cout << "after filtering count is " << filtered_point_count <<
-    //     std::endl;
-    // }
-
-    auto filtered_cluster_indexes =
-        sycl::malloc_shared<uint16_t>(width * height * 4, q);
-    auto filtered_cluster_points =
-        sycl::malloc_shared<ClusterPoint>(width * height * 4, q);
 
     auto transformed_to_cluster_points = oneapi::dpl::make_transform_iterator(
         oneapi::dpl::make_zip_iterator(
@@ -692,16 +662,18 @@ int main(int argc, char *argv[]) {
 
     auto filtered_points_count = std::distance(o_zipped_iterator, o_zipped_end);
 
-    dumpClusterPointsToCSV(filtered_cluster_points, filtered_points_count,
-                           "out3.csv");
-    dumpPlainToCSV(filtered_cluster_indexes, filtered_points_count, "out4.csv");
+    if (debug) {
+        dumpClusterPointsToCSV(filtered_cluster_points, filtered_points_count,
+                               "out3.csv");
+        dumpPlainToCSV(filtered_cluster_indexes, filtered_points_count,
+                       "out4.csv");
+    }
 
-    auto rewritten_filtered_values_buffer =
-        sycl::malloc_shared<ClusterExtents>(1 << 16, q);
     auto transformed_extents_iter =
         dpl::make_transform_iterator(filtered_values_buffer, [](const auto &a) {
             return ClusterExtents{0, a.count};
         });
+
 
     oneapi::dpl::inclusive_scan(
         policy_e, transformed_extents_iter,
@@ -713,10 +685,12 @@ int main(int argc, char *argv[]) {
         },
         ClusterExtents{0, 0});
 
-    dumpExtentLikeToCSV(
-        rewritten_filtered_values_buffer,
-        std::distance(filtered_values_buffer, filtered_values_end),
-        "out4extents.csv");
+    if (debug) {
+        dumpExtentLikeToCSV(
+            rewritten_filtered_values_buffer,
+            std::distance(filtered_values_buffer, filtered_values_end),
+            "out4extents.csv");
+    }
 
     oneapi::dpl::sort(policy_e, o_zipped_iterator, o_zipped_end,
                       [](const auto &left, const auto &right) {
@@ -733,8 +707,10 @@ int main(int argc, char *argv[]) {
                           return l_point.slope < r_point.slope;
                       });
 
-    dumpClusterPointsToCSV(filtered_cluster_points, filtered_points_count,
-                           "out5.csv");
+    if (debug) {
+        dumpClusterPointsToCSV(filtered_cluster_points, filtered_points_count,
+                               "out5.csv");
+    }
 
     if (false) {
         uint8_t *big_image = new uint8_t[width * height * 3]();
@@ -775,65 +751,56 @@ int main(int argc, char *argv[]) {
                        width * 3);
     }
 
-    auto line_fit_points_buffer =
-        sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
-
-    auto transformed_to_linefit_points = oneapi::dpl::make_transform_iterator(
+    oneapi::dpl::transform(policy_e,
         filtered_cluster_points,
+        filtered_cluster_points + filtered_points_count,
+        pre_line_fit_points_buffer,
         [width, height, grayscale_buffer](const ClusterPoint &a) {
             return compute_initial_linefit(a, width, height, grayscale_buffer);
-        });
+        }
+    );
 
-    dumpLineFitPointsToCSV(transformed_to_linefit_points, filtered_points_count,
-                           "out6a.csv");
+    if (debug) {
+        dumpLineFitPointsToCSV(pre_line_fit_points_buffer,
+                               filtered_points_count, "out6a.csv");
+    }
 
-    auto asdasd = oneapi::dpl::inclusive_scan_by_segment(
+    auto asdasd_begin = line_fit_points_buffer;
+
+    auto asdasd_end = oneapi::dpl::inclusive_scan_by_segment(
         policy_e, filtered_cluster_indexes,
         filtered_cluster_indexes + filtered_points_count,
-        transformed_to_linefit_points, line_fit_points_buffer);
+        pre_line_fit_points_buffer, asdasd_begin);
 
-    auto line_fit_points_count = std::distance(line_fit_points_buffer, asdasd);
-    dumpLineFitPointsToCSV(line_fit_points_buffer, line_fit_points_count,
-                           "out6b.csv");
+    auto line_fit_points_count = std::distance(asdasd_begin, asdasd_end);
 
-    std::cout << "filtered count " << filtered_points_count
-              << " line fit points count " << line_fit_points_count
-              << std::endl;
+    if (debug) {
+        dumpLineFitPointsToCSV(line_fit_points_buffer, line_fit_points_count,
+                               "out6b.csv");
+    }
 
-    // {
-    //     for (int i = 0; i < 10; i++) {
-    //         std::cout << "i " << i << std::endl;
-    //         std::cout << transformed_to_linefit_points[i].W << std::endl;
-    //         std::cout << line_fit_points_buffer[i].W << std::endl;
-    //     }
-    // }
+    // std::cout << "filtered count " << filtered_points_count
+    //           << " line fit points count " << line_fit_points_count
+    //           << std::endl;
 
-    // std::cout << "test tt" << std::distance(line_fit_points_buffer, asdasd)
-    // << std::endl;
-
-    auto found_corners_buffer =
-        sycl::malloc_shared<Corner>(width * height * 4, q);
     q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner))
         .wait();
 
-    auto corners_test = new Corner[width * height];
-
-    double *test2 = new double;
-
     fit_lines(q, line_fit_points_buffer, filtered_cluster_indexes,
               rewritten_filtered_values_buffer, filtered_points_count,
-              found_corners_buffer, test2);
+              found_corners_buffer);
 
-    auto compacted_corners = sycl::malloc_shared<Corner>(width * height * 4, q);
 
     auto compacted_corners_end = oneapi::dpl::copy_if(
         policy_e, found_corners_buffer,
         found_corners_buffer + width * height * 4, compacted_corners,
         [](const Corner &p) { return p.error != 0; });
 
-    dumpCornerToCSV(compacted_corners,
-                    std::distance(compacted_corners, compacted_corners_end),
-                    "out7.csv");
+    if (debug) {
+        dumpCornerToCSV(compacted_corners,
+                        std::distance(compacted_corners, compacted_corners_end),
+                        "out7.csv");
+    }
 
     oneapi::dpl::sort(policy_e, compacted_corners, compacted_corners_end,
                       [](const auto &left, const auto &right) {
@@ -845,10 +812,12 @@ int main(int argc, char *argv[]) {
     size_t compacted_corner_count =
         std::distance(compacted_corners, compacted_corners_end);
 
-    dumpCornerToCSV(compacted_corners, compacted_corner_count, "out8.csv");
+    if (debug) {
+        dumpCornerToCSV(compacted_corners, compacted_corner_count, "out8.csv");
+    }
 
-    std::cout << "compacted corner distance is " << compacted_corner_count
-              << std::endl;
+    // std::cout << "compacted corner distance is " << compacted_corner_count
+    //           << std::endl;
 
     auto transform_corner_keys = dpl::make_transform_iterator(
         compacted_corners, [](Corner a) { return a.cluster_index; });
@@ -857,19 +826,19 @@ int main(int argc, char *argv[]) {
         oneapi::dpl::counting_iterator<uint32_t>(0),
         [](uint32_t a) { return PeakExtents{a, 1}; });
 
-    auto cluster_data_new_buffer =
-        sycl::malloc_shared<PeakExtents>(width * height, q);
 
     auto [corner_keys_end, corner_values_end] = oneapi::dpl::reduce_by_segment(
         policy_e, transform_corner_keys,
         transform_corner_keys + compacted_corner_count, transform_corner_values,
         trash_keys_buffer, cluster_data_new_buffer, std::equal_to<>(),
-        reduce_extents);
+        [](const auto &left, const auto &right) {
+            return reduce_extents(left, right);
+        });
 
     size_t cluster_data_new_count =
         std::distance(cluster_data_new_buffer, corner_values_end);
 
-    {
+    if (debug) {
         uint8_t *cluster_image = new uint8_t[width * height * 3]();
         for (int j = 0; j < filtered_points_count; j++) {
             auto x = filtered_cluster_points[j].x_value();
@@ -909,6 +878,9 @@ int main(int argc, char *argv[]) {
             }
         }
         stbi_write_png("peaks.png", width, height, 3, cluster_image, width * 3);
+
+        dumpExtentLikeToCSV(cluster_data_new_buffer, cluster_data_new_count,
+                            "out7extents.csv");
     }
 
     if (false) {
@@ -957,21 +929,15 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    dumpExtentLikeToCSV(cluster_data_new_buffer, cluster_data_new_count,
-                        "out7extents.csv");
-
-    auto output_quads = sycl::malloc_shared<FittedQuad>(width * height, q);
     auto zero_quads =
         q.memset(output_quads, 0, width * height * sizeof(FittedQuad));
     zero_quads.wait();
-
-    std::cout << "ttt" << std::endl;
 
     do_indexing(q, cluster_data_new_buffer, cluster_data_new_count,
                 compacted_corners, line_fit_points_buffer,
                 rewritten_filtered_values_buffer, output_quads);
 
-    {
+    if (debug) {
         uint8_t *cluster_image = new uint8_t[width * height * 3]();
         for (int i = 0; i < cluster_data_new_count; i++) {
             const auto &quad = output_quads[i].indices;
@@ -999,6 +965,12 @@ int main(int argc, char *argv[]) {
             }
         }
         stbi_write_png("quad.png", width, height, 3, cluster_image, width * 3);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+
+
     }
 
     std::cout << "ttt1" << std::endl;

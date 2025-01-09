@@ -70,6 +70,26 @@ struct BkeBitmap {
     constexpr static uint16_t MUST_UNION_S_0 = 1 << 15;
 };
 
+sycl::event
+internal_compress_labels(sycl::queue &q, uint32_t *labels, size_t width,
+                         size_t height,
+                         const std::vector<sycl::event> &deps = {}) {
+    return q.parallel_for(sycl::range(height / 2, width / 2), deps,
+                          [labels](sycl::item<2> it) {
+                              size_t width = it.get_range(1) * 2;
+                              size_t height = it.get_range(0) * 2;
+
+                              size_t x = it.get_id(1) * 2;
+                              size_t y = it.get_id(0) * 2;
+
+                              size_t image_linear_id = y * width + x;
+
+                              UnionFind<sycl::memory_scope_device> uf{labels};
+                              uf.find_compress(image_linear_id);
+                              uf.find_compress(image_linear_id + 1);
+                          });
+}
+
 // kernel args should half height and width of images:
 // top left of each 2x2 block
 sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
@@ -239,9 +259,13 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                 static_cast<uint32_t>(information_byte);
         });
 
+    // Addtional premerge `COMPRESSION` step.
+    auto pre_compression_event =
+        internal_compress_labels(q, labels, width, height, {init_event});
+
     // This is the `MERGE` step of the BKE algorithm.
     auto merge_event = q.parallel_for(
-        sycl::range(height / 2, width / 2), init_event,
+        sycl::range(height / 2, width / 2), pre_compression_event,
         [labels](sycl::item<2> it) {
             size_t width = it.get_range(1) * 2;
             size_t height = it.get_range(0) * 2;
@@ -281,20 +305,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
 
     // This is the `COMPRESSION` step of the BKE algorithm.
     auto compression_event =
-        q.parallel_for(sycl::range(height / 2, width / 2), merge_event,
-                       [labels](sycl::item<2> it) {
-                           size_t width = it.get_range(1) * 2;
-                           size_t height = it.get_range(0) * 2;
-
-                           size_t x = it.get_id(1) * 2;
-                           size_t y = it.get_id(0) * 2;
-
-                           size_t image_linear_id = y * width + x;
-
-                           UnionFind<sycl::memory_scope_device> uf{labels};
-                           uf.find_compress(image_linear_id);
-                           uf.find_compress(image_linear_id + 1);
-                       });
+        internal_compress_labels(q, labels, width, height, {merge_event});
 
     // This is the `FINAL_LABELLING` step of the BKE algorithm.
     // This is extended from traditional BKE in order to also keep

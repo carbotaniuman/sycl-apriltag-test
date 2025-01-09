@@ -61,11 +61,8 @@ inline LineFitPoint compute_initial_linefit(ClusterPoint p, uint32_t width,
             1;
     }
 
-    double fx = rx;
-    double fy = ry;
-
-    return LineFitPoint{W * fx,      W * fy,      W * fx * fx,
-                        W * fy * fy, W * fx * fy, W};
+    return LineFitPoint{W * rx,      W * ry,      W * rx * rx,
+                        W * ry * ry, W * rx * ry, W};
 }
 
 #endif

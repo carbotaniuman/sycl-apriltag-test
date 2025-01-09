@@ -140,11 +140,11 @@ void fit_line(LineFitPoint moment, size_t num_in_moment, double *line_params,
 void fit_lines(sycl::queue &q, const LineFitPoint *points,
                const uint16_t *cluster_indices,
                const ClusterExtents *cluster_extents, size_t points_size,
-               Corner *found_corners, double *test) {
+               Corner *found_corners) {
     constexpr size_t TARGETED_WG_SIZE = 32;
     constexpr size_t END_OFFSET = POINTS_PER_END + 1;
 
-    std::cout << "points_size = " << points_size << std::endl;
+    // std::cout << "points_size = " << points_size << std::endl;
 
     size_t count_needed = (points_size + 23) / 24 * TARGETED_WG_SIZE;
     q.submit([=](sycl::handler &h) {
@@ -358,7 +358,6 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
                  }
              });
      }).wait();
-    std::cout << "OUT?" << std::endl;
 }
 
 template <class T> void sort_4(std::array<T, 4> &arr) {
@@ -485,14 +484,14 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      params01[2] * params12[2] + params01[3] * params12[3];
 
                  is_valid_fit &= std::fabs(dot) <= cos_critical_rad;
-                 if (false) {
-                     std::cout << cluster_id << "!" << combination_number
-                               << std::endl;
-                     std::cout << test0 << " " << test1 << " " << test2 << " "
-                               << test3 << std::endl;
-                     std::cout << dot << " " << cos_critical_rad << " "
-                               << is_valid_fit << std::endl;
-                 }
+                //  if (false) {
+                //      std::cout << cluster_id << "!" << combination_number
+                //                << std::endl;
+                //      std::cout << test0 << " " << test1 << " " << test2 << " "
+                //                << test3 << std::endl;
+                //      std::cout << dot << " " << cos_critical_rad << " "
+                //                << is_valid_fit << std::endl;
+                //  }
              }
 
              double current_err = is_valid_fit
