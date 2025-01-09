@@ -10,7 +10,7 @@ constexpr static uint32_t LABEL_PIXEL_MASK = 1U << 31;
 constexpr static uint32_t LABEL_VALUE_MASK = ~LABEL_PIXEL_MASK;
 
 sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
-                               uint32_t *label_scratch, uint32_t labels, HashTable::Entry *sizes,
+                               uint32_t *label_scratch, uint32_t *labels, HashTable::Entry *sizes,
                                size_t sizes_elem, size_t width, size_t height,
                                const std::vector<sycl::event> &deps = {});
 
