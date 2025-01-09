@@ -268,6 +268,7 @@ int main(int argc, char *argv[]) {
         auto thresholded_buffer =
             sycl::malloc_shared<uint8_t>(width * height, q);
 
+        auto scratch_label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
         auto label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
         size_t sizes_elems = 1 << 16;
         auto sizes_buffer =
@@ -335,7 +336,7 @@ int main(int argc, char *argv[]) {
             q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
 
         auto segment = image_segmentation(
-            q, thresholded_buffer, label_buffer, sizes_buffer, sizes_elems,
+            q, thresholded_buffer, scratch_label_buffer, label_buffer, sizes_buffer, sizes_elems,
             width, height, {threshold, zero_labels, zero_sizes});
         segment.wait();
 
