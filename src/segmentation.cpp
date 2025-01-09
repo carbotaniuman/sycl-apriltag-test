@@ -332,14 +332,12 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             uint32_t count_255 =
                 sycl::popcount(information_byte & BkeBitmap::BITMASK_POS_255);
             if (count_255 != 0) {
-                label_255 = table.insert_add<sycl::memory_scope_device>(
-                    label_255, count_255);
+                label_255 = 123 ^ label_255;
             }
             uint32_t count_0 =
                 sycl::popcount(information_byte & BkeBitmap::BITMASK_POS_0);
             if (count_0 != 0) {
-                label_0 = table.insert_add<sycl::memory_scope_device>(label_0,
-                                                                      count_0);
+                label_0 = 144 ^ label_0;
             }
 
             if (information_byte & BkeBitmap::TOP_LEFT_255) {
