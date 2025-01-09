@@ -316,10 +316,10 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
         [label_scratch, labels, sizes, sizes_elem](sycl::item<2> it) {
             HashTable table{sizes, sizes_elem};
             size_t width = it.get_range(1) * 2;
-            size_t height = it.get_range(0);
+            size_t height = it.get_range(0) * 2;
 
             size_t x = it.get_id(1) * 2;
-            size_t y = it.get_id(0);
+            size_t y = it.get_id(0) * 2;
 
             size_t image_linear_id = y * width + x;
 
