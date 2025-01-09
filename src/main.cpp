@@ -234,7 +234,7 @@ void dumpClusterPointsToCSV(const ClusterPoint *boundaryPoints, size_t size,
 
 int main(int argc, char *argv[]) {
     bool debug = false;
-    bool prog = false;
+    bool prog = true;
     sycl::queue q;
     if (argc == 1) {
         q = sycl::queue{sycl::cpu_selector_v,
