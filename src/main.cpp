@@ -235,6 +235,7 @@ void dumpClusterPointsToCSV(const ClusterPoint *boundaryPoints, size_t size,
 
 int main(int argc, char *argv[]) {
     bool debug = false;
+    bool prog = true;
     sycl::queue q;
     if (argc == 1) {
         q = sycl::queue{sycl::cpu_selector_v,
@@ -309,6 +310,10 @@ int main(int argc, char *argv[]) {
         threshold_image(q, grayscale_buffer, extrema_buffer, thresholded_buffer,
                         width, height, {copy_image});
 
+    if (prog) {
+        std::cout << 1 << std::endl;
+    }
+
     if (debug) {
         auto output = new uint8_t[width * height];
 
@@ -329,6 +334,10 @@ int main(int argc, char *argv[]) {
                                       sizes_buffer, sizes_elems, width, height,
                                       {threshold, zero_labels, zero_sizes});
 
+    if (prog) {
+        std::cout << 2 << std::endl;
+    }
+    
     if (debug) {
         auto labels_out = new uint32_t[width * height];
         auto sizes_out = new HashTable::Entry[sizes_elems];
@@ -379,6 +388,10 @@ int main(int argc, char *argv[]) {
     auto boundaries =
         find_boundaries(q, label_buffer, sizes_buffer, 1 << 16, points_buffer,
                         width, height, {segment, zero_points});
+
+    if (prog) {
+        std::cout << 3 << std::endl;
+    }
 
     if (debug) {
         auto points_out = new BoundaryPoint[width * height * 4]();
@@ -431,7 +444,9 @@ int main(int argc, char *argv[]) {
         });
     
     size_t compacted_points_count = std::distance(compacted_points, compacted_points_end);
-
+    if (prog) {
+        std::cout << 4 << std::endl;
+    }
 
     if (debug) {
         dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
@@ -463,6 +478,10 @@ int main(int argc, char *argv[]) {
         [](const auto &left, const auto &right) {
             return left.blob_label() < right.blob_label();
         });
+    
+    if (prog) {
+        std::cout << 5 << std::endl;
+    }
 
     if (debug) {
         dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
@@ -526,6 +545,10 @@ int main(int argc, char *argv[]) {
         [](const auto &left, const auto &right) {
             return reduce_bounds(left, right);
         });
+
+    if (prog) {
+        std::cout << 6 << std::endl;
+    }
 
     if (debug) {
         dumpClusterBoundsToCSV(values_start,
@@ -660,6 +683,10 @@ int main(int argc, char *argv[]) {
             return true;
         });
 
+    if (prog) {
+        std::cout << 7 << std::endl;
+    }
+
     auto filtered_points_count = std::distance(o_zipped_iterator, o_zipped_end);
 
     if (debug) {
@@ -685,6 +712,10 @@ int main(int argc, char *argv[]) {
         },
         ClusterExtents{0, 0});
 
+    if (prog) {
+        std::cout << 8 << std::endl;
+    }
+
     if (debug) {
         dumpExtentLikeToCSV(
             rewritten_filtered_values_buffer,
@@ -706,6 +737,10 @@ int main(int argc, char *argv[]) {
 
                           return l_point.slope < r_point.slope;
                       });
+
+    if (prog) {
+        std::cout << 9 << std::endl;
+    }
 
     if (debug) {
         dumpClusterPointsToCSV(filtered_cluster_points, filtered_points_count,
@@ -760,6 +795,10 @@ int main(int argc, char *argv[]) {
         }
     );
 
+    if (prog) {
+        std::cout << 10 << std::endl;
+    }
+
     if (debug) {
         dumpLineFitPointsToCSV(pre_line_fit_points_buffer,
                                filtered_points_count, "out6a.csv");
@@ -771,6 +810,10 @@ int main(int argc, char *argv[]) {
         policy_e, filtered_cluster_indexes,
         filtered_cluster_indexes + filtered_points_count,
         pre_line_fit_points_buffer, asdasd_begin);
+    
+    if (prog) {
+        std::cout << 11 << std::endl;
+    }
 
     auto line_fit_points_count = std::distance(asdasd_begin, asdasd_end);
 
@@ -790,11 +833,18 @@ int main(int argc, char *argv[]) {
               rewritten_filtered_values_buffer, filtered_points_count,
               found_corners_buffer);
 
+    if (prog) {
+        std::cout << 12 << std::endl;
+    }
 
     auto compacted_corners_end = oneapi::dpl::copy_if(
         policy_e, found_corners_buffer,
         found_corners_buffer + width * height * 4, compacted_corners,
         [](const Corner &p) { return p.error != 0; });
+
+    if (prog) {
+        std::cout << 13 << std::endl;
+    }
 
     if (debug) {
         dumpCornerToCSV(compacted_corners,
@@ -809,6 +859,11 @@ int main(int argc, char *argv[]) {
                           }
                           return left.error > right.error;
                       });
+
+    if (prog) {
+        std::cout << 14 << std::endl;
+    }
+
     size_t compacted_corner_count =
         std::distance(compacted_corners, compacted_corners_end);
 
@@ -834,6 +889,10 @@ int main(int argc, char *argv[]) {
         [](const auto &left, const auto &right) {
             return reduce_extents(left, right);
         });
+
+    if (prog) {
+        std::cout << 15 << std::endl;
+    }
 
     size_t cluster_data_new_count =
         std::distance(cluster_data_new_buffer, corner_values_end);
@@ -936,6 +995,10 @@ int main(int argc, char *argv[]) {
     do_indexing(q, cluster_data_new_buffer, cluster_data_new_count,
                 compacted_corners, line_fit_points_buffer,
                 rewritten_filtered_values_buffer, output_quads);
+
+    if (prog) {
+        std::cout << 16 << std::endl;
+    }
 
     if (debug) {
         uint8_t *cluster_image = new uint8_t[width * height * 3]();
