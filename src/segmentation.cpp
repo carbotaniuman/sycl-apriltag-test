@@ -358,22 +358,22 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                 labels[image_linear_id + 1] = 0;
             }
 
-            if (information_byte & BkeBitmap::BOTTOM_LEFT_255) {
-                labels[image_linear_id + width] = LABEL_PIXEL_MASK | label_255;
-            } else if (information_byte & BkeBitmap::BOTTOM_LEFT_0) {
-                labels[image_linear_id + width] = label_0;
-            } else {
-                labels[image_linear_id + width] = 0;
-            }
+            // if (information_byte & BkeBitmap::BOTTOM_LEFT_255) {
+            //     labels[image_linear_id + width] = LABEL_PIXEL_MASK | label_255;
+            // } else if (information_byte & BkeBitmap::BOTTOM_LEFT_0) {
+            //     labels[image_linear_id + width] = label_0;
+            // } else {
+            //     labels[image_linear_id + width] = 0;
+            // }
 
-            if (information_byte & BkeBitmap::BOTTOM_RIGHT_255) {
-                labels[image_linear_id + width + 1] =
-                    LABEL_PIXEL_MASK | label_255;
-            } else if (information_byte & BkeBitmap::BOTTOM_RIGHT_0) {
-                labels[image_linear_id + width + 1] = label_0;
-            } else {
-                labels[image_linear_id + width + 1] = 0;
-            }
+            // if (information_byte & BkeBitmap::BOTTOM_RIGHT_255) {
+            //     labels[image_linear_id + width + 1] =
+            //         LABEL_PIXEL_MASK | label_255;
+            // } else if (information_byte & BkeBitmap::BOTTOM_RIGHT_0) {
+            //     labels[image_linear_id + width + 1] = label_0;
+            // } else {
+            //     labels[image_linear_id + width + 1] = 0;
+            // }
         });
 
     return final_labelling_event;
