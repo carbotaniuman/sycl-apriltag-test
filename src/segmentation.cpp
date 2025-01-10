@@ -358,7 +358,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                 top_right_write = label_0;
             }
 
-            reinterpret_cast<uint64_t*>(labels)[image_linear_id / 2] = (top_left_write << 32) | top_right_write;
+            // reinterpret_cast<uint64_t*>(labels)[image_linear_id / 2] = (top_left_write << 32) | top_right_write;
 
             if (information_byte & BkeBitmap::BOTTOM_LEFT_255) {
                 labels[image_linear_id + width] = LABEL_PIXEL_MASK | label_255;
