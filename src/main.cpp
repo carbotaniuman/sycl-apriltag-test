@@ -633,7 +633,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto valid_blob_filter = ValidBlobFilter();
+    auto valid_blob_filter = ValidBlobFilter(width, height);
 
     auto filtered_values_end = oneapi::dpl::copy_if(
         policy_e, values_buffer,
