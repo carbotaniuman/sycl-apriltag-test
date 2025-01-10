@@ -84,10 +84,13 @@ inline ClusterBounds reduce_bounds(const ClusterBounds &a,
 
 struct ValidBlobFilter {
     size_t tag_width = 4;
-    size_t min_cluster_pixels = 5;
-    size_t max_cluster_pixels = 2 * (2 * 420 + 2 * 312);
     bool normal_border = true;
     bool reversed_border = false;
+    size_t min_cluster_pixels = 5;
+    size_t max_cluster_pixels = 2 * (2 * 420 + 2 * 312);
+
+    ValidBlobFilter(size_t width, size_t height): max_cluster_pixels(2 * (2 * width + 2 * height)) {
+    }
 
     bool operator()(const ClusterBounds &b) const {
         if (b.count < min_cluster_pixels) {
