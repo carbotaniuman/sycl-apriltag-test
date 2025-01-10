@@ -87,7 +87,7 @@ struct ValidBlobFilter {
     bool normal_border = true;
     bool reversed_border = false;
     size_t min_cluster_pixels = 5;
-    size_t max_cluster_pixels = 2 * (2 * 420 + 2 * 312);
+    size_t max_cluster_pixels;
 
     ValidBlobFilter(size_t width, size_t height): max_cluster_pixels(2 * (2 * width + 2 * height)) {
     }
