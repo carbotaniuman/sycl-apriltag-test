@@ -234,7 +234,7 @@ void dumpClusterPointsToCSV(const ClusterPoint *boundaryPoints, size_t size,
 }
 
 int main(int argc, char *argv[]) {
-    bool debug = true;
+    bool debug = false;
     bool prog = true;
     sycl::queue q;
     if (argc == 1) {
@@ -245,8 +245,8 @@ int main(int argc, char *argv[]) {
                         sycl::property::queue::in_order{}};
     }
 
-    // auto policy_e = oneapi::dpl::execution::make_device_policy(q);
-    auto policy_e = oneapi::dpl::execution::par_unseq;
+    auto policy_e = oneapi::dpl::execution::make_device_policy(q);
+    // auto policy_e = oneapi::dpl::execution::par_unseq;
 
     std::cout << "Local memory size: "
               << q.get_device().get_info<sycl::info::device::local_mem_size>()
@@ -256,7 +256,7 @@ int main(int argc, char *argv[]) {
               << q.get_device().get_info<sycl::info::device::name>()
               << std::endl;
 
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 3; i++) {
         int width, height, comp;
     stbi_uc *data =
         stbi_load("../decimate2.png", &width, &height, &comp, STBI_grey);
