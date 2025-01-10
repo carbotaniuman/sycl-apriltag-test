@@ -306,6 +306,19 @@ int main(int argc, char *argv[]) {
         sycl::malloc_shared<PeakExtents>(width * height, q);
     auto output_quads = sycl::malloc_shared<FittedQuad>(width * height, q);
 
+    auto zero_scratch_labels =
+        q.memset(scratch_label_buffer, 0, width * height * sizeof(uint32_t));
+    auto zero_labels =
+        q.memset(label_buffer, 0, width * height * sizeof(uint16_t));
+    auto zero_sizes =
+        q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
+    auto zero_points =
+        q.memset(points_buffer, 0, width * height * 4 * sizeof(BoundaryPoint));
+    auto zero_corners = q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner));
+    auto zero_quads =
+        q.memset(output_quads, 0, width * height * sizeof(FittedQuad));
+    q.wait();
+
     auto start = std::chrono::high_resolution_clock::now();
     auto last = start;
 
@@ -331,13 +344,6 @@ int main(int argc, char *argv[]) {
 
         stbi_write_png("thresholded.png", width, height, 1, output, width * 1);
     }
-
-    auto zero_scratch_labels =
-        q.memset(scratch_label_buffer, 0, width * height * sizeof(uint32_t));
-    auto zero_labels =
-        q.memset(label_buffer, 0, width * height * sizeof(uint16_t));
-    auto zero_sizes =
-        q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
 
     auto segment = image_segmentation(q, thresholded_buffer, scratch_label_buffer, label_buffer,
                                       sizes_buffer, sizes_elems, width, height,
@@ -394,9 +400,6 @@ int main(int argc, char *argv[]) {
 
         stbi_write_png("segmented.png", width, height, 3, images, width * 3);
     }
-
-    auto zero_points =
-        q.memset(points_buffer, 0, width * height * 4 * sizeof(BoundaryPoint));
 
     auto boundaries =
         find_boundaries(q, label_buffer, sizes_buffer, 1 << 16, points_buffer,
@@ -871,8 +874,6 @@ int main(int argc, char *argv[]) {
     //           << " line fit points count " << line_fit_points_count
     //           << std::endl;
 
-    auto zero_corners = q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner));
-
     fit_lines(q, line_fit_points_buffer, filtered_cluster_indexes,
               rewritten_filtered_values_buffer, filtered_points_count,
               found_corners_buffer, {zero_corners});
@@ -1044,8 +1045,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto zero_quads =
-        q.memset(output_quads, 0, width * height * sizeof(FittedQuad));
     zero_quads.wait();
 
     do_indexing(q, cluster_data_new_buffer, cluster_data_new_count,
