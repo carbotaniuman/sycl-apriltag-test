@@ -307,6 +307,7 @@ int main(int argc, char *argv[]) {
     auto output_quads = sycl::malloc_shared<FittedQuad>(width * height, q);
 
     auto start = std::chrono::high_resolution_clock::now();
+    auto last = start;
 
     auto copy_image = q.copy(data, grayscale_buffer, width * height);
 
@@ -316,8 +317,10 @@ int main(int argc, char *argv[]) {
     threshold.wait();
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "1: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Thresholding: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -342,8 +345,10 @@ int main(int argc, char *argv[]) {
     segment.wait();
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "2: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Segmentation (CCL): " << duration.count() << std::endl;
     }
     
     if (debug) {
@@ -399,8 +404,10 @@ int main(int argc, char *argv[]) {
     boundaries.wait();
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "3: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Finding boundaries: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -452,8 +459,10 @@ int main(int argc, char *argv[]) {
     
     size_t compacted_points_count = std::distance(compacted_points, compacted_points_end);
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "4: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Compacting boundaries: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -488,8 +497,10 @@ int main(int argc, char *argv[]) {
         });
     
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "5: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Sorting boundaries by label: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -556,8 +567,10 @@ int main(int argc, char *argv[]) {
         });
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "6: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Analysing boundaries: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -643,6 +656,13 @@ int main(int argc, char *argv[]) {
     size_t filtered_values_distance =
         std::distance(filtered_values_buffer, filtered_values_end);
 
+    if (prog) {
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Filter valid boundary extents: " << duration.count() << std::endl;
+    }
+
     auto transformed_to_cluster_points = oneapi::dpl::make_transform_iterator(
         oneapi::dpl::make_zip_iterator(
             compacted_points, oneapi::dpl::counting_iterator<uint32_t>(0)),
@@ -694,8 +714,10 @@ int main(int argc, char *argv[]) {
         });
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "7: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Filter valid boundary points: " << duration.count() << std::endl;
     }
 
     auto filtered_points_count = std::distance(o_zipped_iterator, o_zipped_end);
@@ -724,8 +746,10 @@ int main(int argc, char *argv[]) {
         ClusterExtents{0, 0});
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "8: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Renumber filtered extents: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -751,8 +775,10 @@ int main(int argc, char *argv[]) {
                       });
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "9: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Sort points by slope: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -809,8 +835,10 @@ int main(int argc, char *argv[]) {
     );
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "10: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Transform to line fit points: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -826,8 +854,10 @@ int main(int argc, char *argv[]) {
         reinterpret_cast<sycl::vec<double, 8>*>(pre_line_fit_points_buffer), asdasd_begin);
     
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "11: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Inclusive sum line fit points: " << duration.count() << std::endl;
     }
 
     auto line_fit_points_count = std::distance(asdasd_begin, asdasd_end);
@@ -849,8 +879,10 @@ int main(int argc, char *argv[]) {
               found_corners_buffer);
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "12: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Fit lines: " << duration.count() << std::endl;
     }
 
     auto compacted_corners_end = oneapi::dpl::copy_if(
@@ -859,8 +891,10 @@ int main(int argc, char *argv[]) {
         [](const Corner &p) { return p.error != 0; });
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "13: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Compact fitted lines: " << duration.count() << std::endl;
     }
 
     if (debug) {
@@ -878,8 +912,10 @@ int main(int argc, char *argv[]) {
                       });
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "14: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Sort fitted lines by error: " << duration.count() << std::endl;
     }
 
     size_t compacted_corner_count =
@@ -909,8 +945,10 @@ int main(int argc, char *argv[]) {
         });
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "15: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Find extents of fitted lines: " << duration.count() << std::endl;
     }
 
     size_t cluster_data_new_count =
@@ -1016,8 +1054,10 @@ int main(int argc, char *argv[]) {
                 rewritten_filtered_values_buffer, output_quads);
 
     if (prog) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-        std::cout << "16: " << duration.count() << std::endl;
+        auto cur = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(cur - last);
+        last = cur;
+        std::cout << "Find quads: " << duration.count() << std::endl;
     }
 
     if (debug) {
