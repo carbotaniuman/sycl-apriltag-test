@@ -9,6 +9,7 @@ struct LineFitPoint {
     double Mx, My;
     double Mxx, Myy, Mxy;
     double W;
+    double a, b;
 
     LineFitPoint &operator+=(const LineFitPoint &rhs) {
         Mx += rhs.Mx;

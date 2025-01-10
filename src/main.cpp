@@ -309,6 +309,7 @@ int main(int argc, char *argv[]) {
     auto threshold =
         threshold_image(q, grayscale_buffer, extrema_buffer, thresholded_buffer,
                         width, height, {copy_image});
+    threshold.wait();
 
     if (prog) {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
@@ -334,6 +335,7 @@ int main(int argc, char *argv[]) {
     auto segment = image_segmentation(q, thresholded_buffer, label_buffer,
                                       sizes_buffer, sizes_elems, width, height,
                                       {threshold, zero_labels, zero_sizes});
+    segment.wait();
 
     if (prog) {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
@@ -814,12 +816,12 @@ int main(int argc, char *argv[]) {
                                filtered_points_count, "out6a.csv");
     }
 
-    auto asdasd_begin = line_fit_points_buffer;
+    auto asdasd_begin = reinterpret_cast<sycl::vec<double, 8>*>(line_fit_points_buffer);
 
     auto asdasd_end = oneapi::dpl::inclusive_scan_by_segment(
         policy_e, filtered_cluster_indexes,
         filtered_cluster_indexes + filtered_points_count,
-        pre_line_fit_points_buffer, asdasd_begin);
+        reinterpret_cast<sycl::vec<double, 8>*>(pre_line_fit_points_buffer), asdasd_begin);
     
     if (prog) {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
