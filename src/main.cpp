@@ -871,12 +871,11 @@ int main(int argc, char *argv[]) {
     //           << " line fit points count " << line_fit_points_count
     //           << std::endl;
 
-    q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner))
-        .wait();
+    auto zero_corners = q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner));
 
     fit_lines(q, line_fit_points_buffer, filtered_cluster_indexes,
               rewritten_filtered_values_buffer, filtered_points_count,
-              found_corners_buffer);
+              found_corners_buffer, {zero_corners});
 
     if (prog) {
         auto cur = std::chrono::high_resolution_clock::now();
