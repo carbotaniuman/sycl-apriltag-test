@@ -342,7 +342,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                                                                       count_0);
             }
 
-            uint64_t top_left_write = 0;
+            uint32_t top_left_write = 0;
 
             if (information_byte & BkeBitmap::TOP_LEFT_255) {
                 top_left_write = LABEL_PIXEL_MASK | label_255;
@@ -350,7 +350,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                 top_left_write = label_0;
             }
 
-            uint64_t top_right_write = 0;
+            uint32_t top_right_write = 0;
 
             if (information_byte & BkeBitmap::TOP_RIGHT_255) {
                 top_right_write = LABEL_PIXEL_MASK | label_255;
@@ -358,7 +358,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                 top_right_write = label_0;
             }
 
-            // reinterpret_cast<uint64_t*>(labels)[image_linear_id / 2] = (top_left_write << 32) | top_right_write;
+            reinterpret_cast<uint32_t*>(labels)[image_linear_id / 2] = (top_left_write << 32) | top_right_write;
 
             if (information_byte & BkeBitmap::BOTTOM_LEFT_255) {
                 labels[image_linear_id + width] = LABEL_PIXEL_MASK | label_255;
