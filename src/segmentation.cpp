@@ -342,38 +342,45 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                                                                       count_0);
             }
 
+            uint32_t top_left, top_right;
+
             if (information_byte & BkeBitmap::TOP_LEFT_255) {
-                labels[image_linear_id] = LABEL_PIXEL_MASK | label_255;
+                top_left = LABEL_PIXEL_MASK | label_255;
             } else if (information_byte & BkeBitmap::TOP_LEFT_0) {
-                labels[image_linear_id] = label_0;
+                top_left = label_0;
             } else {
-                labels[image_linear_id] = 0;
+                top_left = 0;
             }
 
             if (information_byte & BkeBitmap::TOP_RIGHT_255) {
-                labels[image_linear_id + 1] = LABEL_PIXEL_MASK | label_255;
+                top_right = LABEL_PIXEL_MASK | label_255;
             } else if (information_byte & BkeBitmap::TOP_RIGHT_0) {
-                labels[image_linear_id + 1] = label_0;
+                top_right = label_0;
             } else {
-                labels[image_linear_id + 1] = 0;
+                top_right = 0;
             }
 
+            uint32_t bottom_left, bottom_right;
+
             if (information_byte & BkeBitmap::BOTTOM_LEFT_255) {
-                labels[image_linear_id + width] = LABEL_PIXEL_MASK | label_255;
+                bottom_left = LABEL_PIXEL_MASK | label_255;
             } else if (information_byte & BkeBitmap::BOTTOM_LEFT_0) {
-                labels[image_linear_id + width] = label_0;
+                bottom_left = label_0;
             } else {
-                labels[image_linear_id + width] = 0;
+                bottom_left = 0;
             }
 
             if (information_byte & BkeBitmap::BOTTOM_RIGHT_255) {
-                labels[image_linear_id + width + 1] =
+                bottom_right =
                     LABEL_PIXEL_MASK | label_255;
             } else if (information_byte & BkeBitmap::BOTTOM_RIGHT_0) {
-                labels[image_linear_id + width + 1] = label_0;
+                bottom_right = label_0;
             } else {
-                labels[image_linear_id + width + 1] = 0;
+                bottom_right = 0;
             }
+
+            reinterpret_cast<uint32_t*>(labels)[image_linear_id / 2] = (top_left << 16 | top_right);
+            reinterpret_cast<uint32_t*>(labels)[(image_linear_id + width) / 2] = (bottom_left << 16 | bottom_right);
         });
 
     return final_labelling_event;
