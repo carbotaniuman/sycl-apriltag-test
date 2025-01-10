@@ -140,7 +140,7 @@ void fit_line(LineFitPoint moment, size_t num_in_moment, double *line_params,
 void fit_lines(sycl::queue &q, const LineFitPoint *points,
                const uint16_t *cluster_indices,
                const ClusterExtents *cluster_extents, size_t points_size,
-               Corner *found_corners) {
+               Corner *found_corners, const std::vector<sycl::event> &deps) {
     constexpr size_t TARGETED_WG_SIZE = 32;
     constexpr size_t END_OFFSET = POINTS_PER_END + 1;
 
@@ -148,6 +148,7 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
 
     size_t count_needed = (points_size + 23) / 24 * TARGETED_WG_SIZE;
     q.submit([=](sycl::handler &h) {
+         h.depends_on(deps);
          sycl::local_accessor<uint16_t> local_cluster_indices{
              sycl::range(TARGETED_WG_SIZE), h};
          sycl::local_accessor<ClusterExtents> local_cluster_extents{
