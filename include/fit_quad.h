@@ -43,6 +43,6 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
 void do_indexing(sycl::queue &q, const PeakExtents *extents,
                  size_t extents_count, const Corner *compacted_corners,
                  const LineFitPoint *points,
-                 const ClusterExtents *cluster_extents, FittedQuad *fitted);
+                 const ClusterExtents *cluster_extents, FittedQuad *fitted, const std::vector<sycl::event> &deps = {});
 
 #endif

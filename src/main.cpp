@@ -234,7 +234,7 @@ void dumpClusterPointsToCSV(const ClusterPoint *boundaryPoints, size_t size,
 }
 
 int main(int argc, char *argv[]) {
-    bool debug = true;
+    bool debug = false;
     bool prog = true;
     sycl::queue q;
     if (argc == 1) {
@@ -245,8 +245,8 @@ int main(int argc, char *argv[]) {
                         sycl::property::queue::in_order{}};
     }
 
-    // auto policy_e = oneapi::dpl::execution::make_device_policy(q);
-    auto policy_e = oneapi::dpl::execution::par_unseq;
+    auto policy_e = oneapi::dpl::execution::make_device_policy(q);
+    // auto policy_e = oneapi::dpl::execution::par_unseq;
 
     std::cout << "Local memory size: "
               << q.get_device().get_info<sycl::info::device::local_mem_size>()
@@ -255,56 +255,79 @@ int main(int argc, char *argv[]) {
     std::cout << "Running on "
               << q.get_device().get_info<sycl::info::device::name>()
               << std::endl;
-
-    for (int i = 0; i < 1; i++) {
-        int width, height, comp;
+    
+    int width, height, comp;
     stbi_uc *data =
         stbi_load("../decimate2.png", &width, &height, &comp, STBI_grey);
     fprintf(stdout, "width: %d, height: %d, comp: %d\n", width, height, comp);
 
-        auto grayscale_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
-
-        auto extrema_buffer = sycl::malloc_shared<sycl::vec<uint8_t, 2>>(
-            width / 4 * height / 4, q);
-        auto thresholded_buffer =
-            sycl::malloc_shared<uint8_t>(width * height, q);
-
-        auto scratch_label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
-        auto label_buffer = sycl::malloc_shared<uint16_t>(width * height, q);
-        size_t sizes_elems = 1 << 15;
-        auto sizes_buffer =
-            sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
-
+    auto grayscale_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
+    q.memset(grayscale_buffer, 0xFFFF, width * height * sizeof(uint8_t));
+    auto extrema_buffer = sycl::malloc_shared<sycl::vec<uint8_t, 2>>(
+        width / 4 * height / 4, q);
+    q.memset(extrema_buffer, 0xFFFF, width / 4 * height / 4 * sizeof(sycl::vec<uint8_t, 2>));
+    auto thresholded_buffer =
+        sycl::malloc_shared<uint8_t>(width * height, q);
+    q.memset(thresholded_buffer, 0xFFFF, width * height * sizeof(uint8_t));
+    auto scratch_label_buffer = sycl::malloc_shared<uint32_t>(width * height, q);
+    q.memset(scratch_label_buffer, 0xFFFF, width * height * sizeof(uint32_t));
+    auto label_buffer = sycl::malloc_shared<uint16_t>(width * height, q);
+    q.memset(label_buffer, 0xFFFF, width * height * sizeof(uint16_t));
+    size_t sizes_elems = 1 << 15;
+    auto sizes_buffer =
+        sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
+    q.memset(sizes_buffer, 0xFFFF, sizes_elems * sizeof(HashTable::Entry));
     auto points_buffer =
         sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
-    
-        auto compacted_points =
+    q.memset(points_buffer, 0xFFFF, width * height * 4 * sizeof(BoundaryPoint));
+    auto compacted_points =
         sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
-
-    size_t *compacted_points_count_ptr = sycl::malloc_shared<size_t>(1, q);
-
-    auto trash_keys_buffer = sycl::malloc_shared<uint32_t>(1 << 16, q);
-    auto values_buffer = sycl::malloc_shared<ClusterBounds>(1 << 16, q);
+    q.memset(compacted_points, 0xFFFF, width * height * 4 * sizeof(BoundaryPoint));
+    auto compacted_points_count_ptr = sycl::malloc_shared<size_t>(1, q);
+    q.memset(compacted_points_count_ptr, 0xFFFF, 1 * sizeof(size_t));
+    auto trash_keys_buffer = sycl::malloc_shared<uint32_t>(sizes_elems, q);
+    q.memset(trash_keys_buffer, 0xFFFF, sizes_elems * sizeof(uint32_t));
+    auto values_buffer = sycl::malloc_shared<ClusterBounds>(sizes_elems, q);
+    q.memset(values_buffer, 0xFFFF, sizes_elems * sizeof(ClusterBounds));
     auto filtered_values_buffer =
-        sycl::malloc_shared<ClusterBounds>(1 << 16, q);
+        sycl::malloc_shared<ClusterBounds>(sizes_elems, q);
+    q.memset(filtered_values_buffer, 0xFFFF, sizes_elems * sizeof(ClusterBounds));
     auto filtered_cluster_indexes =
         sycl::malloc_shared<uint16_t>(width * height * 4, q);
+    q.memset(filtered_cluster_indexes, 0xFFFF, width * height * 4 * sizeof(uint16_t));
     auto filtered_cluster_points =
         sycl::malloc_shared<ClusterPoint>(width * height * 4, q);
+    q.memset(filtered_cluster_points, 0xFFFF, width * height * 4 * sizeof(ClusterPoint));
     auto rewritten_filtered_values_buffer =
-        sycl::malloc_shared<ClusterExtents>(1 << 16, q);
-
+        sycl::malloc_shared<ClusterExtents>(sizes_elems, q);
+    q.memset(rewritten_filtered_values_buffer, 0xFFFF, sizes_elems * sizeof(ClusterExtents));
     auto pre_line_fit_points_buffer =
         sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
-
+    q.memset(pre_line_fit_points_buffer, 0xFFFF, width * height * 4 * sizeof(LineFitPoint));
     auto line_fit_points_buffer =
         sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
+    q.memset(line_fit_points_buffer, 0xFFFF, width * height * 4 * sizeof(LineFitPoint));
     auto found_corners_buffer =
         sycl::malloc_shared<Corner>(width * height * 4, q);
+    q.memset(found_corners_buffer, 0xFFFF, width * height * 4 * sizeof(Corner));
     auto compacted_corners = sycl::malloc_shared<Corner>(width * height * 4, q);
+    q.memset(compacted_corners, 0xFFFF, width * height * 4 * sizeof(Corner));
     auto cluster_data_new_buffer =
         sycl::malloc_shared<PeakExtents>(width * height, q);
+    q.memset(cluster_data_new_buffer, 0xFFFF, width * height * sizeof(PeakExtents));
     auto output_quads = sycl::malloc_shared<FittedQuad>(width * height, q);
+    q.memset(output_quads, 0xFFFF, width * height * sizeof(FittedQuad));
+    q.wait();
+
+    for (int i = 0; i < 3; i++) {
+        auto zero_sizes =
+            q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
+        auto zero_points =
+            q.memset(points_buffer, 0, width * height * 4 * sizeof(BoundaryPoint));
+        auto zero_corners = q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner));
+        auto zero_quads =
+            q.memset(output_quads, 0, width * height * sizeof(FittedQuad));
+    q.wait();
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -329,16 +352,9 @@ int main(int argc, char *argv[]) {
         stbi_write_png("thresholded.png", width, height, 1, output, width * 1);
     }
 
-    auto zero_scratch_labels =
-        q.memset(scratch_label_buffer, 0, width * height * sizeof(uint32_t));
-    auto zero_labels =
-        q.memset(label_buffer, 0, width * height * sizeof(uint16_t));
-    auto zero_sizes =
-        q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
-
     auto segment = image_segmentation(q, thresholded_buffer, scratch_label_buffer, label_buffer,
                                       sizes_buffer, sizes_elems, width, height,
-                                      {threshold, zero_scratch_labels, zero_labels, zero_sizes});
+                                      {threshold, zero_sizes});
     segment.wait();
 
     if (prog) {
@@ -389,9 +405,6 @@ int main(int argc, char *argv[]) {
 
         stbi_write_png("segmented.png", width, height, 3, images, width * 3);
     }
-
-    auto zero_points =
-        q.memset(points_buffer, 0, width * height * 4 * sizeof(BoundaryPoint));
 
     auto boundaries =
         find_boundaries(q, label_buffer, sizes_buffer, 1 << 16, points_buffer,
@@ -841,8 +854,6 @@ int main(int argc, char *argv[]) {
     //           << " line fit points count " << line_fit_points_count
     //           << std::endl;
 
-    auto zero_corners = q.memset(found_corners_buffer, 0, width * height * 4 * sizeof(Corner));
-
     fit_lines(q, line_fit_points_buffer, filtered_cluster_indexes,
               rewritten_filtered_values_buffer, filtered_points_count,
               found_corners_buffer, {zero_corners});
@@ -1006,13 +1017,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto zero_quads =
-        q.memset(output_quads, 0, width * height * sizeof(FittedQuad));
-    zero_quads.wait();
-
     do_indexing(q, cluster_data_new_buffer, cluster_data_new_count,
                 compacted_corners, line_fit_points_buffer,
-                rewritten_filtered_values_buffer, output_quads);
+                rewritten_filtered_values_buffer, output_quads, {zero_quads});
 
     if (prog) {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);

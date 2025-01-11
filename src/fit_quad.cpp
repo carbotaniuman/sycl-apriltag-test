@@ -379,7 +379,8 @@ using ChosenCombinadics = Combinadics<uint8_t, 15, 4, 16>;
 void do_indexing(sycl::queue &q, const PeakExtents *extents,
                  size_t extents_count, const Corner *compacted_corners,
                  const LineFitPoint *points,
-                 const ClusterExtents *cluster_extents, FittedQuad *fitted) {
+                 const ClusterExtents *cluster_extents, FittedQuad *fitted,
+                 const std::vector<sycl::event> &deps) {
     constexpr size_t CHOSEN_PER_EXTENT = 256;
     constexpr size_t TARGETED_WG_SIZE = 32;
 
@@ -387,7 +388,7 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
     // laucnh 2d kernel {extents_count, 10 choose 4};
     q.parallel_for(
          sycl::nd_range(sycl::range(extents_count, CHOSEN_PER_EXTENT),
-                        sycl::range(1, CHOSEN_PER_EXTENT)),
+                        sycl::range(1, CHOSEN_PER_EXTENT)), deps,
          [=](sycl::nd_item<2> it) {
              auto cluster_id = it.get_global_id(0);
              auto combination_number = it.get_global_id(1);
