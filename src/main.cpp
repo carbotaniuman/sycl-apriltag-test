@@ -244,8 +244,8 @@ int main(int argc, char *argv[]) {
                         sycl::property::queue::in_order{}};
     }
 
-    // auto policy_e = oneapi::dpl::execution::make_device_policy(q);
-    auto policy_e = oneapi::dpl::execution::par_unseq;
+    auto policy_e = oneapi::dpl::execution::make_device_policy(q);
+    // auto policy_e = oneapi::dpl::execution::par_unseq;
 
     std::cout << "Local memory size: "
               << q.get_device().get_info<sycl::info::device::local_mem_size>()
