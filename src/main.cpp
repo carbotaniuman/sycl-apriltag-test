@@ -291,6 +291,8 @@ int main(int argc, char *argv[]) {
         sycl::malloc_shared<uint16_t>(width * height * 4, q);
     auto filtered_cluster_points =
         sycl::malloc_shared<ClusterPoint>(width * height * 4, q);
+    auto prewritten_filtered_values_buffer =
+        sycl::malloc_shared<uint32_t>(1 << 16, q);
     auto rewritten_filtered_values_buffer =
         sycl::malloc_shared<ClusterExtents>(1 << 16, q);
 
@@ -457,6 +459,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (debug) {
+        dumpBoundaryPointsToCSV(points_buffer, width * height * 4,
+                                "out0.csv");
         dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
                                 "out1.csv");
 
@@ -709,19 +713,25 @@ int main(int argc, char *argv[]) {
 
     auto transformed_extents_iter =
         dpl::make_transform_iterator(filtered_values_buffer, [](const auto &a) {
-            return ClusterExtents{0, a.count};
+            return a.count;
         });
 
-
-    oneapi::dpl::inclusive_scan(
+    oneapi::dpl::exclusive_scan(
         policy_e, transformed_extents_iter,
         transformed_extents_iter +
             std::distance(filtered_values_buffer, filtered_values_end),
+        prewritten_filtered_values_buffer, 0);
+
+    oneapi::dpl::transform(
+        transformed_extents_iter,
+        transformed_extents_iter +
+            std::distance(filtered_values_buffer, filtered_values_end),
+        prewritten_filtered_values_buffer,
         rewritten_filtered_values_buffer,
-        [](const ClusterExtents &left, const ClusterExtents &right) {
-            return ClusterExtents{left.start + left.count, right.count};
-        },
-        ClusterExtents{0, 0});
+        [](uint32_t count, uint32_t start) {
+            return ClusterExtents{start, count};
+        }
+    );
 
     if (prog) {
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
