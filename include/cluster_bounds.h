@@ -89,8 +89,8 @@ struct ValidBlobFilter {
     size_t min_cluster_pixels = 5;
     size_t max_cluster_pixels;
 
-    ValidBlobFilter(size_t width, size_t height): max_cluster_pixels(2 * (2 * width + 2 * height)) {
-    }
+    ValidBlobFilter(size_t width, size_t height)
+        : max_cluster_pixels(2 * (2 * width + 2 * height)) {}
 
     bool operator()(const ClusterBounds &b) const {
         if (b.count < min_cluster_pixels) {

@@ -93,8 +93,9 @@ internal_compress_labels(sycl::queue &q, uint32_t *labels, size_t width,
 // kernel args should half height and width of images:
 // top left of each 2x2 block
 sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
-                               uint32_t *label_scratch, uint16_t *labels, HashTable::Entry *sizes,
-                               size_t sizes_elem, size_t width, size_t height,
+                               uint32_t *label_scratch, uint16_t *labels,
+                               HashTable::Entry *sizes, size_t sizes_elem,
+                               size_t width, size_t height,
                                const std::vector<sycl::event> &deps) {
     // This is the `INITIALIZATION` step of the BKE algorithm.
     auto init_event = q.parallel_for(
@@ -254,7 +255,8 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             handle_pixel_test(1, -1, 8, BkeBitmap::MUST_UNION_S_255);
 
             label_scratch[image_linear_id] = image_linear_id + label_offset_255;
-            label_scratch[image_linear_id + 1] = image_linear_id + label_offset_0;
+            label_scratch[image_linear_id + 1] =
+                image_linear_id + label_offset_0;
             label_scratch[image_linear_id + width] =
                 static_cast<uint32_t>(information_byte);
         });
@@ -304,8 +306,8 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
         });
 
     // This is the `COMPRESSION` step of the BKE algorithm.
-    auto compression_event =
-        internal_compress_labels(q, label_scratch, width, height, {merge_event});
+    auto compression_event = internal_compress_labels(q, label_scratch, width,
+                                                      height, {merge_event});
 
     // This is the `FINAL_LABELLING` step of the BKE algorithm.
     // This is extended from traditional BKE in order to also keep
@@ -371,16 +373,18 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             }
 
             if (information_byte & BkeBitmap::BOTTOM_RIGHT_255) {
-                bottom_right =
-                    LABEL_PIXEL_MASK | label_255;
+                bottom_right = LABEL_PIXEL_MASK | label_255;
             } else if (information_byte & BkeBitmap::BOTTOM_RIGHT_0) {
                 bottom_right = label_0;
             } else {
                 bottom_right = 0;
             }
 
-            reinterpret_cast<uint32_t*>(labels)[image_linear_id / 2] = (top_left << 16 | top_right);
-            reinterpret_cast<uint32_t*>(labels)[(image_linear_id + width) / 2] = (bottom_left << 16 | bottom_right);
+            reinterpret_cast<uint32_t *>(labels)[image_linear_id / 2] =
+                (top_left << 16 | top_right);
+            reinterpret_cast<uint32_t *>(
+                labels)[(image_linear_id + width) / 2] =
+                (bottom_left << 16 | bottom_right);
         });
 
     return final_labelling_event;
