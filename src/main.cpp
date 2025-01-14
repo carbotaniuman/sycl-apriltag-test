@@ -348,6 +348,8 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
+            dumpPlainToCSV(scratch_label_buffer, width * height, "outneg1.csv");
+
             auto labels_out = new uint16_t[width * height];
             auto sizes_out = new HashTable::Entry[sizes_elems];
 
