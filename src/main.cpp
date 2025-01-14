@@ -266,10 +266,10 @@ int main(int argc, char *argv[]) {
         sycl::malloc_shared<sycl::vec<uint8_t, 2>>(width / 4 * height / 4, q);
     auto thresholded_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
     auto scratch_label_buffer =
-        sycl::malloc_shared<uint32_t>(width * height, q);
-    auto label_buffer = sycl::malloc_shared<uint16_t>(width * height, q);
+        sycl::malloc_device<uint32_t>(width * height, q);
+    auto label_buffer = sycl::malloc_device<uint16_t>(width * height, q);
     size_t sizes_elems = 1 << 15;
-    auto sizes_buffer = sycl::malloc_shared<HashTable::Entry>(sizes_elems, q);
+    auto sizes_buffer = sycl::malloc_device<HashTable::Entry>(sizes_elems, q);
     auto points_buffer =
         sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
     auto compacted_points =
@@ -348,14 +348,16 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            dumpPlainToCSV(scratch_label_buffer, width * height, "outneg1.csv");
-
+            auto scratch_labels_out = new uint32_t[width * height];
             auto labels_out = new uint16_t[width * height];
             auto sizes_out = new HashTable::Entry[sizes_elems];
 
+            q.copy(scratch_label_buffer, scratch_labels_out, width * height, segment);
             q.copy(label_buffer, labels_out, width * height, segment);
             q.copy(sizes_buffer, sizes_out, sizes_elems, segment);
             q.wait();
+            
+            dumpPlainToCSV(scratch_labels_out, width * height, "outneg1.csv");
 
             uint32_t *colors = new uint32_t[width * height];
             uint8_t *images = new uint8_t[width * height * 3];
