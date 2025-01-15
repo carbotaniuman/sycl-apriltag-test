@@ -413,6 +413,9 @@ int main(int argc, char *argv[]) {
             q.copy(points_buffer, points_out, width * height * 4, boundaries);
             q.wait();
 
+            dumpBoundaryPointsToCSV(points_out, width * height * 4,
+                                    "out0.csv");
+
             size_t present = 0;
             size_t zeroes = 0;
             for (size_t i = 0; i < width * height * 4; i++) {
@@ -465,21 +468,22 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            dumpBoundaryPointsToCSV(points_buffer, width * height * 4,
-                                    "out0.csv");
-            dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
+            auto points_out = new BoundaryPoint[width * height * 4]();
+            q.copy(compacted_points, points_out, width * height * 4);
+            q.wait();
+            dumpBoundaryPointsToCSV(points_out, compacted_points_count,
                                     "out1.csv");
 
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
             for (size_t i = 0; i < compacted_points_count; i++) {
-                if (compacted_points[i] ==
+                if (points_out[i] ==
                     sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
                     break;
                 }
 
-                auto x = compacted_points[i].x_value();
-                auto y = compacted_points[i].y_value();
-                auto label = compacted_points[i].blob_label();
+                auto x = points_out[i].x_value();
+                auto y = points_out[i].y_value();
+                auto label = points_out[i].blob_label();
 
                 cluster_image[(y * width + x) * 3 + 0] = 0;
                 cluster_image[(y * width + x) * 3 + 1] = 0;
@@ -505,12 +509,12 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            dumpBoundaryPointsToCSV(compacted_points, compacted_points_count,
-                                    "out2.csv");
-
             auto points_out = new BoundaryPoint[compacted_points_count]();
             q.copy(compacted_points, points_out, compacted_points_count);
             q.wait();
+
+            dumpBoundaryPointsToCSV(points_out, compacted_points_count,
+                                    "out2.csv");
 
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
             std::unordered_map<uint32_t, uint32_t> vs{};
@@ -574,7 +578,11 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            dumpClusterBoundsToCSV(values_start,
+            auto values_out = new ClusterBounds[1 << 16]();
+            q.copy(values_start, values_out, std::distance(values_start, values_end));
+            q.wait();
+            
+            dumpClusterBoundsToCSV(values_out,
                                    std::distance(values_start, values_end),
                                    "out2bounds.csv");
         }
@@ -725,9 +733,15 @@ int main(int argc, char *argv[]) {
             std::distance(o_zipped_iterator, o_zipped_end);
 
         if (debug) {
-            dumpClusterPointsToCSV(filtered_cluster_points,
+            auto filtered_cluster_out = new ClusterPoint[width * height * 4]();
+            auto filtered_indexes_out = new uint16_t[width * height * 4]();
+            q.copy(filtered_cluster_points, filtered_cluster_out, filtered_points_count);
+            q.copy(filtered_cluster_indexes, filtered_indexes_out, filtered_points_count);
+            q.wait();
+
+            dumpClusterPointsToCSV(filtered_cluster_out,
                                    filtered_points_count, "out3.csv");
-            dumpPlainToCSV(filtered_cluster_indexes, filtered_points_count,
+            dumpPlainToCSV(filtered_indexes_out, filtered_points_count,
                            "out4.csv");
         }
 
@@ -758,8 +772,12 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
+            auto rewritten_filtered_out = new ClusterExtents[width * height * 4]();
+            q.copy(rewritten_filtered_values_buffer, rewritten_filtered_out, std::distance(filtered_values_buffer, filtered_values_end));
+            q.wait();
+
             dumpExtentLikeToCSV(
-                rewritten_filtered_values_buffer,
+                rewritten_filtered_out,
                 std::distance(filtered_values_buffer, filtered_values_end),
                 "out4extents.csv");
         }
@@ -787,47 +805,12 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            dumpClusterPointsToCSV(filtered_cluster_points,
+            auto filtered_cluster_out = new ClusterPoint[width * height * 4]();
+            q.copy(filtered_cluster_points, filtered_cluster_out, filtered_points_count);
+            q.wait();
+
+            dumpClusterPointsToCSV(filtered_cluster_out,
                                    filtered_points_count, "out5.csv");
-        }
-
-        if (false) {
-            uint8_t *big_image = new uint8_t[width * height * 3]();
-
-            char buffer[50];
-            for (int f = 0;
-                 f < std::distance(filtered_values_buffer, filtered_values_end);
-                 f++) {
-                sprintf(buffer, "slopes/%d/", f);
-                std::filesystem::create_directories(buffer);
-                auto xt = rewritten_filtered_values_buffer[f];
-                uint8_t *cluster_image = new uint8_t[width * height * 3]();
-
-                std::cout << "start at " << xt.start << " with count "
-                          << xt.count << std::endl;
-                for (int i = xt.start; i < xt.start + xt.count; i++) {
-                    int ttt = i - xt.start;
-                    auto p = filtered_cluster_points[i];
-
-                    auto x = p.x_value();
-                    auto y = p.y_value();
-
-                    cluster_image[(y * width + x) * 3 + 0] = 255;
-                    cluster_image[(y * width + x) * 3 + 1] = 255;
-                    cluster_image[(y * width + x) * 3 + 2] = 255;
-
-                    big_image[(y * width + x) * 3 + (f % 3)] = 255;
-
-                    if (ttt % 10 == 0 || ttt == xt.count - 1) {
-                        sprintf(buffer, "slopes/%d/%d.png", f, ttt);
-                        stbi_write_png(buffer, width, height, 3, cluster_image,
-                                       width * 3);
-                    }
-                }
-                delete[] cluster_image;
-            }
-            stbi_write_png("clusters_filtered.png", width, height, 3, big_image,
-                           width * 3);
         }
 
         oneapi::dpl::transform(
@@ -847,7 +830,11 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            dumpLineFitPointsToCSV(pre_line_fit_points_buffer,
+            auto pre_line_fit_out = new LineFitPoint[width * height * 4]();
+            q.copy(pre_line_fit_points_buffer, pre_line_fit_out, filtered_points_count);
+            q.wait();
+
+            dumpLineFitPointsToCSV(pre_line_fit_out,
                                    filtered_points_count, "out6a.csv");
         }
 
@@ -871,13 +858,13 @@ int main(int argc, char *argv[]) {
         auto line_fit_points_count = std::distance(asdasd_begin, asdasd_end);
 
         if (debug) {
-            dumpLineFitPointsToCSV(line_fit_points_buffer,
+            auto line_fit_out = new LineFitPoint[width * height * 4]();
+            q.copy(line_fit_points_buffer, line_fit_out, line_fit_points_count);
+            q.wait();
+
+            dumpLineFitPointsToCSV(line_fit_out,
                                    line_fit_points_count, "out6b.csv");
         }
-
-        // std::cout << "filtered count " << filtered_points_count
-        //           << " line fit points count " << line_fit_points_count
-        //           << std::endl;
 
         fit_lines(q, line_fit_points_buffer, filtered_cluster_indexes,
                   rewritten_filtered_values_buffer, filtered_points_count,
@@ -894,6 +881,8 @@ int main(int argc, char *argv[]) {
             policy_e, found_corners_buffer,
             found_corners_buffer + width * height * 4, compacted_corners,
             [](const Corner &p) { return p.error != 0; });
+        size_t compacted_corner_count =
+            std::distance(compacted_corners, compacted_corners_end);
 
         if (prog) {
             auto duration =
@@ -903,9 +892,13 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
+            auto corner_out = new Corner[width * height * 4]();
+            q.copy(compacted_corners, corner_out, compacted_corner_count);
+            q.wait();
+
             dumpCornerToCSV(
                 compacted_corners,
-                std::distance(compacted_corners, compacted_corners_end),
+                compacted_corner_count,
                 "out7.csv");
         }
 
@@ -925,17 +918,14 @@ int main(int argc, char *argv[]) {
             std::cout << "14: " << duration.count() << std::endl;
         }
 
-        size_t compacted_corner_count =
-            std::distance(compacted_corners, compacted_corners_end);
-
         if (debug) {
-            dumpCornerToCSV(compacted_corners, compacted_corner_count,
+            auto corner_out = new Corner[width * height * 4]();
+            q.copy(compacted_corners, corner_out, compacted_corner_count);
+            q.wait();
+
+            dumpCornerToCSV(corner_out, compacted_corner_count,
                             "out8.csv");
         }
-
-        // std::cout << "compacted corner distance is " <<
-        // compacted_corner_count
-        //           << std::endl;
 
         auto transform_corner_keys = dpl::make_transform_iterator(
             compacted_corners, [](Corner a) { return a.cluster_index; });
@@ -965,10 +955,20 @@ int main(int argc, char *argv[]) {
             std::distance(cluster_data_new_buffer, corner_values_end);
 
         if (debug) {
+            auto cluster_point_out = new ClusterPoint[width * height * 4]();
+            auto corner_out = new Corner[width * height * 4]();
+            auto cluster_data_new_out = new PeakExtents[width * height]();
+            auto rewritten_filtered_out = new ClusterExtents[width * height * 4]();
+            q.copy(filtered_cluster_points, cluster_point_out, filtered_points_count);
+            q.copy(compacted_corners, corner_out, compacted_corner_count);
+            q.copy(cluster_data_new_buffer, cluster_data_new_out, cluster_data_new_count);
+            q.copy(rewritten_filtered_values_buffer, rewritten_filtered_out, std::distance(filtered_values_buffer, filtered_values_end));
+            q.wait();
+
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
             for (int j = 0; j < filtered_points_count; j++) {
-                auto x = filtered_cluster_points[j].x_value();
-                auto y = filtered_cluster_points[j].y_value();
+                auto x = cluster_point_out[j].x_value();
+                auto y = cluster_point_out[j].y_value();
 
                 cluster_image[(y * width + x) * 3 + 0] = 255;
                 cluster_image[(y * width + x) * 3 + 1] = 255;
@@ -976,19 +976,19 @@ int main(int argc, char *argv[]) {
             }
 
             for (int i = 0; i < cluster_data_new_count; i++) {
-                const auto &peak_extent = cluster_data_new_buffer[i];
-                const auto &extents = rewritten_filtered_values_buffer[i];
+                const auto &peak_extent = cluster_data_new_out[i];
+                const auto &extents = rewritten_filtered_out[i];
 
                 for (int j = 0; j < peak_extent.count; j++) {
                     const auto &corner_test =
-                        compacted_corners[peak_extent.start + j];
+                        corner_out[peak_extent.start + j];
 
                     auto x =
-                        filtered_cluster_points
+                        cluster_point_out
                             [extents.start + corner_test.line_fit_point_index]
                                 .x_value();
                     auto y =
-                        filtered_cluster_points
+                        cluster_point_out
                             [extents.start + corner_test.line_fit_point_index]
                                 .y_value();
 
@@ -1007,52 +1007,8 @@ int main(int argc, char *argv[]) {
             stbi_write_png("peaks.png", width, height, 3, cluster_image,
                            width * 3);
 
-            dumpExtentLikeToCSV(cluster_data_new_buffer, cluster_data_new_count,
+            dumpExtentLikeToCSV(cluster_data_new_out, cluster_data_new_count,
                                 "out7extents.csv");
-        }
-
-        if (false) {
-            uint8_t *big_image = new uint8_t[width * height * 3]();
-
-            char buffer[50];
-            for (int i = 0; i < cluster_data_new_count; i++) {
-                sprintf(buffer, "peaks/%d/", i);
-                std::filesystem::create_directories(buffer);
-
-                const auto &peak_extent = cluster_data_new_buffer[i];
-                const auto &xt = rewritten_filtered_values_buffer[i];
-
-                uint8_t *cluster_image = new uint8_t[width * height * 3]();
-
-                std::cout << "start at " << xt.start << " with count "
-                          << xt.count << std::endl;
-                for (int j = 0; j < peak_extent.count; j++) {
-                    const auto &corner_test =
-                        compacted_corners[peak_extent.start + j];
-
-                    auto x = filtered_cluster_points
-                                 [xt.start + corner_test.line_fit_point_index]
-                                     .x_value();
-                    auto y = filtered_cluster_points
-                                 [xt.start + corner_test.line_fit_point_index]
-                                     .y_value();
-
-                    if (j < 10) {
-                        cluster_image[(y * width + x) * 3 + 0] = 255;
-                        cluster_image[(y * width + x) * 3 + 1] = 255;
-                        cluster_image[(y * width + x) * 3 + 2] = 255;
-                    } else {
-                        cluster_image[(y * width + x) * 3 + (i % 3)] = 255;
-                    }
-
-                    if (true) {
-                        sprintf(buffer, "peaks/%d/%d.png", i, j);
-                        stbi_write_png(buffer, width, height, 3, cluster_image,
-                                       width * 3);
-                    }
-                }
-                delete[] cluster_image;
-            }
         }
 
         zero_quads.wait();
@@ -1069,10 +1025,18 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
+            auto rewritten_filtered_out = new ClusterExtents[width * height * 4]();
+            auto cluster_point_out = new ClusterPoint[width * height * 4]();
+            auto quads_out = new FittedQuad[width * height]();
+            q.copy(rewritten_filtered_values_buffer, rewritten_filtered_out, std::distance(filtered_values_buffer, filtered_values_end));
+            q.copy(filtered_cluster_points, cluster_point_out, filtered_points_count);
+            q.copy(output_quads, quads_out, cluster_data_new_count);
+            q.wait();
+            
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
             for (int i = 0; i < cluster_data_new_count; i++) {
-                const auto &quad = output_quads[i].indices;
-                const auto &extents = rewritten_filtered_values_buffer[i];
+                const auto &quad = quads_out[i].indices;
+                const auto &extents = rewritten_filtered_out[i];
                 std::cout << i << " " << quad[0] << " " << quad[1] << " "
                           << quad[2] << " " << quad[3] << std::endl;
 
@@ -1080,16 +1044,16 @@ int main(int argc, char *argv[]) {
                     quad[3] != 0) {
                     for (int i = 0; i < 4; i++) {
                         auto x =
-                            filtered_cluster_points[extents.start + quad[i]]
+                            cluster_point_out[extents.start + quad[i]]
                                 .x_value();
                         auto y =
-                            filtered_cluster_points[extents.start + quad[i]]
+                            cluster_point_out[extents.start + quad[i]]
                                 .y_value();
 
-                        auto xx = filtered_cluster_points[extents.start +
+                        auto xx = cluster_point_out[extents.start +
                                                           quad[(i + 1) % 4]]
                                       .x_value();
-                        auto yy = filtered_cluster_points[extents.start +
+                        auto yy = cluster_point_out[extents.start +
                                                           quad[(i + 1) % 4]]
                                       .y_value();
 
