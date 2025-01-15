@@ -741,6 +741,7 @@ int main(int argc, char *argv[]) {
             prewritten_filtered_values_buffer, 0);
 
         oneapi::dpl::transform(
+            policy_e,
             transformed_extents_iter,
             transformed_extents_iter +
                 std::distance(filtered_values_buffer, filtered_values_end),
