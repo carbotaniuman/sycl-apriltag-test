@@ -261,42 +261,42 @@ int main(int argc, char *argv[]) {
         stbi_load("../decimate2.png", &width, &height, &comp, STBI_grey);
     fprintf(stdout, "width: %d, height: %d, comp: %d\n", width, height, comp);
 
-    auto grayscale_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
+    auto grayscale_buffer = sycl::malloc_device<uint8_t>(width * height, q);
     auto extrema_buffer =
-        sycl::malloc_shared<sycl::vec<uint8_t, 2>>(width / 4 * height / 4, q);
-    auto thresholded_buffer = sycl::malloc_shared<uint8_t>(width * height, q);
+        sycl::malloc_device<sycl::vec<uint8_t, 2>>(width / 4 * height / 4, q);
+    auto thresholded_buffer = sycl::malloc_device<uint8_t>(width * height, q);
     auto scratch_label_buffer =
         sycl::malloc_device<uint32_t>(width * height, q);
     auto label_buffer = sycl::malloc_device<uint16_t>(width * height, q);
     size_t sizes_elems = 1 << 15;
     auto sizes_buffer = sycl::malloc_device<HashTable::Entry>(sizes_elems, q);
     auto points_buffer =
-        sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
+        sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
     auto compacted_points =
-        sycl::malloc_shared<BoundaryPoint>(width * height * 4, q);
-    size_t *compacted_points_count_ptr = sycl::malloc_shared<size_t>(1, q);
-    auto trash_keys_buffer = sycl::malloc_shared<uint32_t>(1 << 16, q);
-    auto values_buffer = sycl::malloc_shared<ClusterBounds>(1 << 16, q);
+        sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
+    size_t *compacted_points_count_ptr = sycl::malloc_device<size_t>(1, q);
+    auto trash_keys_buffer = sycl::malloc_device<uint32_t>(1 << 16, q);
+    auto values_buffer = sycl::malloc_device<ClusterBounds>(1 << 16, q);
     auto filtered_values_buffer =
-        sycl::malloc_shared<ClusterBounds>(1 << 16, q);
+        sycl::malloc_device<ClusterBounds>(1 << 16, q);
     auto filtered_cluster_indexes =
-        sycl::malloc_shared<uint16_t>(width * height * 4, q);
+        sycl::malloc_device<uint16_t>(width * height * 4, q);
     auto filtered_cluster_points =
-        sycl::malloc_shared<ClusterPoint>(width * height * 4, q);
+        sycl::malloc_device<ClusterPoint>(width * height * 4, q);
     auto prewritten_filtered_values_buffer =
-        sycl::malloc_shared<uint32_t>(1 << 16, q);
+        sycl::malloc_device<uint32_t>(1 << 16, q);
     auto rewritten_filtered_values_buffer =
-        sycl::malloc_shared<ClusterExtents>(1 << 16, q);
+        sycl::malloc_device<ClusterExtents>(1 << 16, q);
     auto pre_line_fit_points_buffer =
-        sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
+        sycl::malloc_device<LineFitPoint>(width * height * 4, q);
     auto line_fit_points_buffer =
-        sycl::malloc_shared<LineFitPoint>(width * height * 4, q);
+        sycl::malloc_device<LineFitPoint>(width * height * 4, q);
     auto found_corners_buffer =
-        sycl::malloc_shared<Corner>(width * height * 4, q);
-    auto compacted_corners = sycl::malloc_shared<Corner>(width * height * 4, q);
+        sycl::malloc_device<Corner>(width * height * 4, q);
+    auto compacted_corners = sycl::malloc_device<Corner>(width * height * 4, q);
     auto cluster_data_new_buffer =
-        sycl::malloc_shared<PeakExtents>(width * height, q);
-    auto output_quads = sycl::malloc_shared<FittedQuad>(width * height, q);
+        sycl::malloc_device<PeakExtents>(width * height, q);
+    auto output_quads = sycl::malloc_device<FittedQuad>(width * height, q);
 
     for (int i = 0; i < 1; i++) {
         auto zero_sizes =
