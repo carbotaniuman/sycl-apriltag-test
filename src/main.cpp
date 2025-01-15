@@ -897,7 +897,7 @@ int main(int argc, char *argv[]) {
             q.wait();
 
             dumpCornerToCSV(
-                compacted_corners,
+                corner_out,
                 compacted_corner_count,
                 "out7.csv");
         }
