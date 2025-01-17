@@ -8,7 +8,7 @@
 // along with the data.
 
 sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
-                            const HashTable::Entry *sizes, size_t sizes_elems,
+                            const HashTable::Entry *sizes,
                             BoundaryPoint *points, size_t width, size_t height,
                             const std::vector<sycl::event> &deps) {
     // The boundaries operation is done in blocks of 4 wide x 3 high, where only
@@ -33,6 +33,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
                            it.get_local_id(1) - 1;
                 size_t y = it.get_group(0) * (it.get_local_range(0) - 1) +
                            it.get_local_id(0) - 1;
+
                 size_t linear_id = y * width + x;
 
                 size_t local_linear_id = it.get_local_linear_id();

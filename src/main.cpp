@@ -188,13 +188,13 @@ void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints, size_t size,
 
     // Write the CSV header
     csvFile
-        << "x_value,y_value,first_blob,second_blob,is_black_to_white,dx,dy\n";
+        << "x_value,y_value,blob_label,is_black_to_white,dx,dy\n";
 
     // Loop over the array and write each point to the CSV
     for (size_t i = 0; i < size; ++i) {
         const auto &point = boundaryPoints[i];
         csvFile << point.x_value() << "," << point.y_value() << ","
-                << point.first_blob << "," << point.second_blob << ","
+                << point.blob_label() << ","
                 << point.is_black_to_white() << "," << point.dx() << ","
                 << point.dy() << "\n";
     }
@@ -274,19 +274,18 @@ int main(int argc, char *argv[]) {
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
     auto compacted_points =
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
-    size_t *compacted_points_count_ptr = sycl::malloc_device<size_t>(1, q);
-    auto trash_keys_buffer = sycl::malloc_device<uint32_t>(1 << 16, q);
-    auto values_buffer = sycl::malloc_device<ClusterBounds>(1 << 16, q);
+    auto trash_keys_buffer = sycl::malloc_device<uint32_t>(sizes_elems, q);
+    auto values_buffer = sycl::malloc_device<ClusterBounds>(sizes_elems, q);
     auto filtered_values_buffer =
-        sycl::malloc_device<ClusterBounds>(1 << 16, q);
+        sycl::malloc_device<ClusterBounds>(sizes_elems, q);
     auto filtered_cluster_indexes =
         sycl::malloc_device<uint16_t>(width * height * 4, q);
     auto filtered_cluster_points =
         sycl::malloc_device<ClusterPoint>(width * height * 4, q);
     auto prewritten_filtered_values_buffer =
-        sycl::malloc_device<uint32_t>(1 << 16, q);
+        sycl::malloc_device<uint32_t>(sizes_elems, q);
     auto rewritten_filtered_values_buffer =
-        sycl::malloc_device<ClusterExtents>(1 << 16, q);
+        sycl::malloc_device<ClusterExtents>(sizes_elems, q);
     auto pre_line_fit_points_buffer =
         sycl::malloc_device<LineFitPoint>(width * height * 4, q);
     auto line_fit_points_buffer =
@@ -295,7 +294,7 @@ int main(int argc, char *argv[]) {
         sycl::malloc_device<Corner>(width * height * 4, q);
     auto compacted_corners = sycl::malloc_device<Corner>(width * height * 4, q);
     auto cluster_data_new_buffer =
-        sycl::malloc_device<PeakExtents>(width * height, q);
+        sycl::malloc_device<PeakExtents>(width * height * 4, q);
     auto output_quads = sycl::malloc_device<FittedQuad>(width * height, q);
 
     for (int i = 0; i < 1; i++) {
@@ -396,8 +395,7 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        auto boundaries = find_boundaries(q, label_buffer, sizes_buffer,
-                                          1 << 16, points_buffer, width, height,
+        auto boundaries = find_boundaries(q, label_buffer, sizes_buffer, points_buffer, width, height,
                                           {segment, zero_points});
         boundaries.wait();
 
@@ -558,16 +556,16 @@ int main(int argc, char *argv[]) {
             dpl::make_zip_iterator(compacted_points,
                                    dpl::counting_iterator<uint32_t>(0)),
             [](auto a) {
-                return ClusterBounds::inital_from_point(std::get<0>(a),
-                                                        std::get<1>(a));
+                return sycl::bit_cast<sycl::vec<int64_t, 4>>(ClusterBounds::inital_from_point(std::get<0>(a),
+                                                        std::get<1>(a)));
             });
 
-        auto values_start = values_buffer;
+        auto values_start = reinterpret_cast<sycl::vec<int64_t, 4>*>(values_buffer);
         auto [keys_end, values_end] = oneapi::dpl::reduce_by_segment(
             policy_e, transform_keys, transform_keys + compacted_points_count,
             transform_values, trash_keys_buffer, values_start,
             std::equal_to<>(), [](const auto &left, const auto &right) {
-                return reduce_bounds(left, right);
+                return sycl::bit_cast<sycl::vec<int64_t, 4>>(reduce_bounds(sycl::bit_cast<ClusterBounds>(left), sycl::bit_cast<ClusterBounds>(right)));
             });
 
         if (prog) {
@@ -578,82 +576,13 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            auto values_out = new ClusterBounds[1 << 16]();
-            q.copy(values_start, values_out, std::distance(values_start, values_end));
+            auto values_out = new ClusterBounds[sizes_elems]();
+            q.copy(values_buffer, values_out, std::distance(values_start, values_end));
             q.wait();
             
             dumpClusterBoundsToCSV(values_out,
                                    std::distance(values_start, values_end),
                                    "out2bounds.csv");
-        }
-
-        if (false) {
-            std::filesystem::create_directories("clusters");
-            for (size_t i = 0; i < std::distance(values_start, values_end);
-                 i++) {
-                uint8_t *cluster_image = new uint8_t[width * height * 3]();
-                auto v = values_start[i];
-                for (size_t j = v.start; j < v.start + v.count; j++) {
-                    auto x = compacted_points[j].x_value();
-                    auto y = compacted_points[j].y_value();
-                    auto label = compacted_points[j].blob_label();
-
-                    cluster_image[(y * width + x) * 3 + 0] = 0;
-                    cluster_image[(y * width + x) * 3 + 1] = 0;
-                    cluster_image[(y * width + x) * 3 + 2] = 0;
-
-                    cluster_image[(y * width + x) * 3 + (label % 3)] = 255;
-                }
-
-                auto x = static_cast<int>(v.cx() / 2);
-                auto y = static_cast<int>(v.cy() / 2);
-
-                cluster_image[(y * width + x) * 3 + 0] = 255;
-                cluster_image[(y * width + x) * 3 + 1] = 255;
-                cluster_image[(y * width + x) * 3 + 2] = 255;
-
-                auto x_min = static_cast<int>(v.x_min / 2);
-                auto y_min = static_cast<int>(v.y_min / 2);
-                auto x_max = static_cast<int>(v.x_max / 2);
-                auto y_max = static_cast<int>(v.y_max / 2);
-
-                for (int a = x_min; a <= x_max; a++) {
-                    {
-                        int yy = y_min;
-                        cluster_image[(yy * width + a) * 3 + 0] = 255;
-                        cluster_image[(yy * width + a) * 3 + 1] = 255;
-                        cluster_image[(yy * width + a) * 3 + 2] = 255;
-                    }
-
-                    {
-                        int yy = y_max;
-                        cluster_image[(yy * width + a) * 3 + 0] = 255;
-                        cluster_image[(yy * width + a) * 3 + 1] = 255;
-                        cluster_image[(yy * width + a) * 3 + 2] = 255;
-                    }
-                }
-
-                for (int a = y_min; a <= y_max; a++) {
-                    {
-                        int xx = x_min;
-                        cluster_image[(a * width + xx) * 3 + 0] = 255;
-                        cluster_image[(a * width + xx) * 3 + 1] = 255;
-                        cluster_image[(a * width + xx) * 3 + 2] = 255;
-                    }
-
-                    {
-                        int xx = x_max;
-                        cluster_image[(a * width + xx) * 3 + 0] = 255;
-                        cluster_image[(a * width + xx) * 3 + 1] = 255;
-                        cluster_image[(a * width + xx) * 3 + 2] = 255;
-                    }
-                }
-                char buffer[50];
-                sprintf(buffer, "clusters/cluster%zu.png", i);
-                stbi_write_png(buffer, width, height, 3, cluster_image,
-                               width * 3);
-                delete[] cluster_image;
-            }
         }
 
         auto valid_blob_filter = ValidBlobFilter(width, height);
