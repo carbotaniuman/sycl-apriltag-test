@@ -1,3 +1,4 @@
+#define NDEBUG
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -591,6 +592,13 @@ int main(int argc, char *argv[]) {
             policy_e, values_buffer,
             values_buffer + std::distance(values_start, values_end),
             filtered_values_buffer, valid_blob_filter);
+
+        if (prog) {
+            auto duration =
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - start);
+            std::cout << "6b: " << duration.count() << std::endl;
+        }
 
         size_t filtered_values_distance =
             std::distance(filtered_values_buffer, filtered_values_end);
