@@ -11,8 +11,8 @@ find_package(oneDPL REQUIRED)
 include(FetchContent)
 FetchContent_Declare(
   apriltag
-  GIT_REPOSITORY https://github.com/AprilRobotics/apriltag.git
-  GIT_TAG        fc2a7b20a49fc8b211709280e337a76a30db3042
+  GIT_REPOSITORY https://github.com/carbotaniuman/apriltag.git
+  GIT_TAG        a8b2f9639765162f2ac12a608d785ceb97deee6b
 )
 FetchContent_MakeAvailable(apriltag)
 
