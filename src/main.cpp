@@ -23,6 +23,8 @@
 #include <fstream>
 #include <iostream>
 
+void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t width, size_t height, uint8_t *greyscaled);
+
 void image_u8_draw_line(uint8_t *im, float x0, float y0, float x1, float y1,
                         int width, int height) {
     double dist = std::hypot((y1 - y0), (x1 - x0));
@@ -962,6 +964,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
+            std::vector<FittedQuad> t;
             auto rewritten_filtered_out = new ClusterExtents[width * height * 4]();
             auto cluster_point_out = new ClusterPoint[width * height * 4]();
             auto quads_out = new FittedQuad[width * height]();
@@ -997,10 +1000,14 @@ int main(int argc, char *argv[]) {
                         image_u8_draw_line(cluster_image, x, y, xx, yy, width,
                                            height);
                     }
+
+                    t.push_back(quads_out[i]);
                 }
             }
             stbi_write_png("quad.png", width, height, 3, cluster_image,
                            width * 3);
+
+            process_fitted_quads(t, width, height, data);
         }
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration =
@@ -1009,4 +1016,140 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "ttt1" << std::endl;
+}
+
+void decode_quads(const QuadCorners *corner_data, size_t corner_data_length,
+                            size_t width, size_t height, uint8_t *greyscaled);
+
+void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t width, size_t height, uint8_t *greyscaled) {
+    std::cout << "TEST" << std::endl;
+    std::vector<QuadCorners> quad_corners_host_;
+    int min_tag_width_ = 8;
+    bool reversed_border_ = false;
+        double cos_critical_rad = std::cos(10 * M_PI / 180);
+
+        int i = 0;
+
+  for (const FittedQuad &quad : fit_quads_host_) {
+    if (!(quad.indices[0] != 0 || quad.indices[1] != 0 || quad.indices[2] != 0 ||
+                    quad.indices[3] != 0)) {
+      continue;
+    }
+    QuadCorners corners;
+    // corners.blob_index = quad.blob_index;
+    corners.reversed_border = reversed_border_;
+
+    double lines[4][4];
+    for (int i = 0; i < 4; i++) {
+      double err;
+      double mse;
+      fit_line(quad.moments[i], quad.num_in_moments[i], lines[i], &err, &mse);
+    }
+
+    bool bad_determinant = false;
+    for (int i = 0; i < 4; i++) {
+      // solve for the intersection of lines (i) and (i+1)&3.
+      // p0 + lambda0*u0 = p1 + lambda1*u1, where u0 and u1
+      // are the line directions.
+      //
+      // lambda0*u0 - lambda1*u1 = (p1 - p0)
+      //
+      // rearrange (solve for lambdas)
+      //
+      // [u0_x   -u1_x ] [lambda0] = [ p1_x - p0_x ]
+      // [u0_y   -u1_y ] [lambda1]   [ p1_y - p0_y ]
+      //
+      // remember that lines[i][0,1] = p, lines[i][2,3] = NORMAL vector.
+      // We want the unit vector, so we need the perpendiculars. Thus, below
+      // we have swapped the x and y components and flipped the y components.
+
+      double A00 = lines[i][3], A01 = -lines[(i + 1) & 3][3];
+      double A10 = -lines[i][2], A11 = lines[(i + 1) & 3][2];
+      double B0 = -lines[i][0] + lines[(i + 1) & 3][0];
+      double B1 = -lines[i][1] + lines[(i + 1) & 3][1];
+
+      double det = A00 * A11 - A10 * A01;
+
+      // inverse.
+      double W00 = A11 / det, W01 = -A01 / det;
+      if (fabs(det) < 0.001) {
+        bad_determinant = true;
+        break;
+      }
+
+      // solve
+      double L0 = W00 * B0 + W01 * B1;
+
+      // compute intersection
+      corners.corners[i][0] = lines[i][0] + L0 * A00;
+      corners.corners[i][1] = lines[i][1] + L0 * A10;
+    }
+    if (bad_determinant) {
+      continue;
+    }
+
+    {
+      float area = 0;
+
+      // get area of triangle formed by points 0, 1, 2, 0
+      float length[3], p;
+      for (int i = 0; i < 3; i++) {
+        int idxa = i;            // 0, 1, 2,
+        int idxb = (i + 1) % 3;  // 1, 2, 0
+        length[i] =
+            hypotf((corners.corners[idxb][0] - corners.corners[idxa][0]),
+                   (corners.corners[idxb][1] - corners.corners[idxa][1]));
+      }
+      p = (length[0] + length[1] + length[2]) / 2;
+
+      area += sqrtf(p * (p - length[0]) * (p - length[1]) * (p - length[2]));
+
+      // get area of triangle formed by points 2, 3, 0, 2
+      for (int i = 0; i < 3; i++) {
+        int idxs[] = {2, 3, 0, 2};
+        int idxa = idxs[i];
+        int idxb = idxs[i + 1];
+        length[i] =
+            hypotf((corners.corners[idxb][0] - corners.corners[idxa][0]),
+                   (corners.corners[idxb][1] - corners.corners[idxa][1]));
+      }
+      p = (length[0] + length[1] + length[2]) / 2;
+
+      area += sqrtf(p * (p - length[0]) * (p - length[1]) * (p - length[2]));
+
+      if (area < 0.95 * min_tag_width_ * min_tag_width_) {
+        continue;
+      }
+    }
+
+    // reject quads whose cumulative angle change isn't equal to 2PI
+    {
+      bool reject_corner = false;
+      for (int i = 0; i < 4; i++) {
+        int i0 = i, i1 = (i + 1) & 3, i2 = (i + 2) & 3;
+
+        float dx1 = corners.corners[i1][0] - corners.corners[i0][0];
+        float dy1 = corners.corners[i1][1] - corners.corners[i0][1];
+        float dx2 = corners.corners[i2][0] - corners.corners[i1][0];
+        float dy2 = corners.corners[i2][1] - corners.corners[i1][1];
+        float cos_dtheta =
+            (dx1 * dx2 + dy1 * dy2) /
+            sqrtf((dx1 * dx1 + dy1 * dy1) * (dx2 * dx2 + dy2 * dy2));
+
+        if (std::abs(cos_dtheta) > cos_critical_rad ||
+            dx1 * dy2 < dy1 * dx2) {
+          reject_corner = true;
+          break;
+        }
+      }
+      if (reject_corner) {
+        continue;
+      }
+    }
+    {
+        quad_corners_host_.push_back(corners);
+    }
+  }
+
+  decode_quads(quad_corners_host_.data(), quad_corners_host_.size(), width, height, greyscaled);
 }

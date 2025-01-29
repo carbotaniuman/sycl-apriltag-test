@@ -25,7 +25,15 @@ struct Corner {
 };
 
 struct FittedQuad {
+    std::array<LineFitPoint, 4> moments;
+    std::array<uint16_t, 4> num_in_moments;
     std::array<uint16_t, 4> indices;
+};
+
+struct QuadCorners {
+  float corners[4][2];
+  bool reversed_border;
+  uint32_t blob_index;
 };
 
 std::tuple<LineFitPoint, size_t> get_moment(const LineFitPoint *points,

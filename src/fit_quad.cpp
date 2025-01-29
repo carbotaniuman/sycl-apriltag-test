@@ -403,6 +403,8 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
              double total_err = 0.0;
              bool is_valid_fit = is_valid_combination;
 
+             std::array<LineFitPoint, 4> moments{};
+             std::array<size_t, 4> num_in_moments{};
              std::array<size_t, 4> line_fit_indices{};
 
              if (is_valid_combination) {
@@ -421,15 +423,11 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                          .line_fit_point_index};
                  sort_4(line_fit_indices);
 
-                 // std::cout << line_fit_indices[0] << " " <<
-                 // line_fit_indices[1] << " " << line_fit_indices[2] << " " <<
-                 // line_fit_indices[3] << std::endl;
-
                  std::array<double, 4> params01;
                  std::array<double, 4> params12;
 
-                 bool test0, test1, test2, test3;
-                 double mse0, mse1, mse2, mse3;
+                 LineFitPoint m0, m1, m2, m3;
+                 uint16_t nim0, nim1, nim2, nim3;
 
                  {
                      auto [moment, num_in_moment] =
@@ -439,8 +437,8 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      fit_line(moment, num_in_moment, params01.data(), &err,
                               &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
-                     test0 = mse <= MAX_LINE_FIT_MSE;
-                     mse0 = mse;
+                     moments[0] = moment;
+                     num_in_moments[0] = num_in_moment;
                      total_err += err;
                  }
 
@@ -452,8 +450,8 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      fit_line(moment, num_in_moment, params12.data(), &err,
                               &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
-                     test1 = mse <= MAX_LINE_FIT_MSE;
-                     mse1 = mse;
+                     moments[1] = moment;
+                     num_in_moments[1] = num_in_moment;
                      total_err += err;
                  }
 
@@ -464,8 +462,8 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      double err, mse;
                      fit_line(moment, num_in_moment, nullptr, &err, &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
-                     test2 = mse <= MAX_LINE_FIT_MSE;
-                     mse2 = mse;
+                     moments[2] = moment;
+                     num_in_moments[2] = num_in_moment;
                      total_err += err;
                  }
 
@@ -476,8 +474,8 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      double err, mse;
                      fit_line(moment, num_in_moment, nullptr, &err, &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
-                     test3 = mse <= MAX_LINE_FIT_MSE;
-                     mse3 = mse;
+                     moments[3] = moment;
+                     num_in_moments[3] = num_in_moment;
                      total_err += err;
                  }
 
@@ -485,15 +483,6 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      params01[2] * params12[2] + params01[3] * params12[3];
 
                  is_valid_fit &= std::fabs(dot) <= cos_critical_rad;
-                 //  if (false) {
-                 //      std::cout << cluster_id << "!" << combination_number
-                 //                << std::endl;
-                 //      std::cout << test0 << " " << test1 << " " << test2 << "
-                 //      "
-                 //                << test3 << std::endl;
-                 //      std::cout << dot << " " << cos_critical_rad << " "
-                 //                << is_valid_fit << std::endl;
-                 //  }
              }
 
              double current_err = is_valid_fit
@@ -516,14 +505,18 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
 
              if (combination_number == lowest_combo) {
                  fitted[cluster_id] =
-                     FittedQuad({static_cast<uint16_t>(line_fit_indices[0]),
+                     FittedQuad{
+                        moments,
+                        {static_cast<uint16_t>(num_in_moments[0]),
+                                 static_cast<uint16_t>(num_in_moments[1]),
+                                 static_cast<uint16_t>(num_in_moments[2]),
+                                 static_cast<uint16_t>(num_in_moments[3])},      
+                        {static_cast<uint16_t>(line_fit_indices[0]),
                                  static_cast<uint16_t>(line_fit_indices[1]),
                                  static_cast<uint16_t>(line_fit_indices[2]),
-                                 static_cast<uint16_t>(line_fit_indices[3])});
+                                 static_cast<uint16_t>(line_fit_indices[3])}
+                     };
              }
          })
         .wait();
 }
-
-// fit_line(LineFitPoint moment, size_t num_in_moment, double *line_params,
-//               double *err, double *mse)
