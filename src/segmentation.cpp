@@ -71,22 +71,18 @@ struct BkeBitmap {
 };
 
 sycl::event
-internal_compress_labels(sycl::queue &q, uint32_t *labels, size_t width,
+internal_compress_labels(sycl::queue &q, uint32_t *white_uf_ptr, uint32_t *black_uf_ptr, size_t width,
                          size_t height,
                          const std::vector<sycl::event> &deps = {}) {
+
     return q.parallel_for(sycl::range(height / 2, width / 2), deps,
-                          [labels](sycl::item<2> it) {
-                              size_t width = it.get_range(1) * 2;
-                              size_t height = it.get_range(0) * 2;
+                          [white_uf_ptr, black_uf_ptr](sycl::item<2> it) {
+                              size_t linear_id = it.get_linear_id();
 
-                              size_t x = it.get_id(1) * 2;
-                              size_t y = it.get_id(0) * 2;
-
-                              size_t image_linear_id = y * width + x;
-
-                              UnionFind<sycl::memory_scope_device> uf{labels};
-                              uf.find_compress(image_linear_id);
-                              uf.find_compress(image_linear_id + 1);
+                              UnionFind<sycl::memory_scope_device> white_uf{white_uf_ptr};
+                              white_uf.find_compress(linear_id);
+                              UnionFind<sycl::memory_scope_device> black_uf{black_uf_ptr};
+                              black_uf.find_compress(linear_id);
                           });
 }
 
@@ -97,10 +93,15 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                                HashTable::Entry *sizes, size_t sizes_elem,
                                size_t width, size_t height,
                                const std::vector<sycl::event> &deps) {
+    uint32_t * white_uf_ptr = label_scratch + (width * height / 4) * 0;
+    uint32_t * black_uf_ptr = label_scratch + (width * height / 4) * 1;
+    uint16_t * information_bytes = reinterpret_cast<uint16_t*>(
+        label_scratch + (width * height / 4) * 2
+    );
     // This is the `INITIALIZATION` step of the BKE algorithm.
     auto init_event = q.parallel_for(
         sycl::range(height / 2, width / 2), deps,
-        [thresholded, label_scratch](sycl::item<2> it) {
+        [thresholded, white_uf_ptr, black_uf_ptr, information_bytes](sycl::item<2> it) {
             size_t width = it.get_range(1) * 2;
             size_t height = it.get_range(0) * 2;
 
@@ -108,6 +109,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             size_t y = it.get_id(0) * 2;
 
             size_t image_linear_id = y * width + x;
+            size_t kernel_linear_id = it.get_linear_id();
 
             // The bits in this byte correspond to `BkeBitmap`
             // and save us from having to refetch image data
@@ -188,7 +190,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             // Block-based komura equivalence needs the id of the first matching
             // block. Calculate the offset compared to our current block.
             int32_t label_offset_255 = 0;
-            int32_t label_offset_0 = 1;
+            int32_t label_offset_0 = 0;
 
             auto handle_pixel_test = [&](int pixel_dy, int pixel_dx,
                                          uint8_t bit_index,
@@ -202,16 +204,16 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                         if (label_offset_255 == 0) {
                             switch (extra_information) {
                             case BkeBitmap::MUST_UNION_P_255:
-                                label_offset_255 = -2 * width - 2;
+                                label_offset_255 = -width - 1;
                                 break;
                             case BkeBitmap::MUST_UNION_Q_255:
-                                label_offset_255 = -2 * width;
+                                label_offset_255 = -width;
                                 break;
                             case BkeBitmap::MUST_UNION_R_255:
-                                label_offset_255 = -2 * width + 2;
+                                label_offset_255 = -width + 1;
                                 break;
                             case BkeBitmap::MUST_UNION_S_255:
-                                label_offset_255 = -2;
+                                label_offset_255 = -1;
                                 break;
                             default:
                                 break;
@@ -224,16 +226,16 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                             // The labels for the 0s is one block to the right.
                             switch (extra_information) {
                             case BkeBitmap::MUST_UNION_P_255:
-                                label_offset_0 = -2 * width - 2 + 1;
+                                label_offset_0 = -width - 1;
                                 break;
                             case BkeBitmap::MUST_UNION_Q_255:
-                                label_offset_0 = -2 * width + 1;
+                                label_offset_0 = -width;
                                 break;
                             case BkeBitmap::MUST_UNION_R_255:
-                                label_offset_0 = -2 * width + 2 + 1;
+                                label_offset_0 = -width + 1;
                                 break;
                             case BkeBitmap::MUST_UNION_S_255:
-                                label_offset_0 = -2 + 1;
+                                label_offset_0 = -1;
                                 break;
                             default:
                                 break;
@@ -254,59 +256,51 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             handle_pixel_test(0, -1, 4, BkeBitmap::MUST_UNION_S_255);
             handle_pixel_test(1, -1, 8, BkeBitmap::MUST_UNION_S_255);
 
-            label_scratch[image_linear_id] = image_linear_id + label_offset_255;
-            label_scratch[image_linear_id + 1] =
-                image_linear_id + label_offset_0;
-            label_scratch[image_linear_id + width] =
-                static_cast<uint32_t>(information_byte);
+            white_uf_ptr[kernel_linear_id] = kernel_linear_id;
+            black_uf_ptr[kernel_linear_id] = kernel_linear_id;
+            information_bytes[kernel_linear_id] = static_cast<uint32_t>(information_byte);
         });
 
     // Addtional premerge `COMPRESSION` step.
     auto pre_compression_event =
-        internal_compress_labels(q, label_scratch, width, height, {init_event});
+        internal_compress_labels(q, white_uf_ptr, black_uf_ptr, width, height, {init_event});
 
     // This is the `MERGE` step of the BKE algorithm.
     auto merge_event = q.parallel_for(
         sycl::range(height / 2, width / 2), pre_compression_event,
-        [label_scratch](sycl::item<2> it) {
-            size_t width = it.get_range(1) * 2;
-            size_t height = it.get_range(0) * 2;
+        [white_uf_ptr, black_uf_ptr, information_bytes](sycl::item<2> it) {
+            size_t width = it.get_range(1);
+            size_t linear_id = it.get_linear_id();
 
-            size_t x = it.get_id(1) * 2;
-            size_t y = it.get_id(0) * 2;
+            uint16_t information_byte = information_bytes[linear_id];
 
-            size_t image_linear_id = y * width + x;
-
-            // Both the 255s and the 0s are in the same union-find array
-            // with spacing to keep them from accidentally being merged.
-            UnionFind<sycl::memory_scope_device> uf{label_scratch};
-
-            uint16_t information_byte =
-                static_cast<uint16_t>(label_scratch[image_linear_id + width]);
+            UnionFind<sycl::memory_scope_device> white_uf{white_uf_ptr};
 
             if (information_byte & BkeBitmap::MUST_UNION_Q_255) {
-                uf.merge(image_linear_id, image_linear_id - 2 * width);
+                white_uf.merge(linear_id, linear_id - width);
             }
             if (information_byte & BkeBitmap::MUST_UNION_R_255) {
-                uf.merge(image_linear_id, image_linear_id - 2 * width + 2);
+                white_uf.merge(linear_id, linear_id - width + 1);
             }
             if (information_byte & BkeBitmap::MUST_UNION_S_255) {
-                uf.merge(image_linear_id, image_linear_id - 2);
+                white_uf.merge(linear_id, linear_id - 1);
             }
 
+            UnionFind<sycl::memory_scope_device> black_uf{black_uf_ptr};
+
             if (information_byte & BkeBitmap::MUST_UNION_Q_0) {
-                uf.merge(image_linear_id + 1, image_linear_id - 2 * width + 1);
+                black_uf.merge(linear_id, linear_id - width);
             }
             if (information_byte & BkeBitmap::MUST_UNION_R_0) {
-                uf.merge(image_linear_id + 1, image_linear_id - 2 * width + 3);
+                black_uf.merge(linear_id, linear_id - width + 1);
             }
             if (information_byte & BkeBitmap::MUST_UNION_S_0) {
-                uf.merge(image_linear_id + 1, image_linear_id - 1);
+                black_uf.merge(linear_id, linear_id - 1);
             }
         });
 
     // This is the `COMPRESSION` step of the BKE algorithm.
-    auto compression_event = internal_compress_labels(q, label_scratch, width,
+    auto compression_event = internal_compress_labels(q, white_uf_ptr, black_uf_ptr, width,
                                                       height, {merge_event});
 
     // This is the `FINAL_LABELLING` step of the BKE algorithm.
@@ -315,7 +309,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
     // us to compact the label ids a little bit.
     auto final_labelling_event = q.parallel_for(
         sycl::range(height / 2, width / 2), compression_event,
-        [label_scratch, labels, sizes, sizes_elem](sycl::item<2> it) {
+        [white_uf_ptr, black_uf_ptr, information_bytes, labels, sizes, sizes_elem](sycl::item<2> it) {
             HashTable table{sizes, sizes_elem};
             size_t width = it.get_range(1) * 2;
             size_t height = it.get_range(0) * 2;
@@ -324,12 +318,12 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             size_t y = it.get_id(0) * 2;
 
             size_t image_linear_id = y * width + x;
+            size_t kernel_linear_id = it.get_linear_id();
 
-            uint32_t label_255 = label_scratch[image_linear_id];
-            uint32_t label_0 = label_scratch[image_linear_id + 1];
+            uint32_t label_255 = white_uf_ptr[kernel_linear_id];
+            uint32_t label_0 = black_uf_ptr[kernel_linear_id];
 
-            uint16_t information_byte =
-                static_cast<uint16_t>(label_scratch[image_linear_id + width]);
+            uint16_t information_byte = information_bytes[kernel_linear_id];
 
             uint32_t count_255 =
                 sycl::popcount(information_byte & BkeBitmap::BITMASK_POS_255);
