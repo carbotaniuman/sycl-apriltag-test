@@ -23,7 +23,7 @@
 #include <fstream>
 #include <iostream>
 
-void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t width, size_t height, uint8_t *greyscaled);
+void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t width, size_t height, uint8_t *greyscaled, bool debug);
 
 void image_u8_draw_line(uint8_t *im, float x0, float y0, float x1, float y1,
                         int width, int height) {
@@ -1007,22 +1007,19 @@ int main(int argc, char *argv[]) {
             stbi_write_png("quad.png", width, height, 3, cluster_image,
                            width * 3);
 
-            process_fitted_quads(t, width, height, data);
+            process_fitted_quads(t, width, height, data, debug);
         }
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration =
             std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
         std::cout << duration.count() << std::endl;
     }
-
-    std::cout << "ttt1" << std::endl;
 }
 
 void decode_quads(const QuadCorners *corner_data, size_t corner_data_length,
-                            size_t width, size_t height, uint8_t *greyscaled);
+                            size_t width, size_t height, uint8_t *greyscaled, bool debug);
 
-void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t width, size_t height, uint8_t *greyscaled) {
-    std::cout << "TEST" << std::endl;
+void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t width, size_t height, uint8_t *greyscaled, bool debug) {
     std::vector<QuadCorners> quad_corners_host_;
     int min_tag_width_ = 8;
     bool reversed_border_ = false;
@@ -1039,10 +1036,10 @@ void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t
     // corners.blob_index = quad.blob_index;
     corners.reversed_border = reversed_border_;
 
-    double lines[4][4];
+    float lines[4][4];
     for (int i = 0; i < 4; i++) {
-      double err;
-      double mse;
+      float err;
+      float mse;
       fit_line(quad.moments[i], quad.num_in_moments[i], lines[i], &err, &mse);
     }
 
@@ -1151,5 +1148,5 @@ void process_fitted_quads(const std::vector<FittedQuad>& fit_quads_host_, size_t
     }
   }
 
-  decode_quads(quad_corners_host_.data(), quad_corners_host_.size(), width, height, greyscaled);
+  decode_quads(quad_corners_host_.data(), quad_corners_host_.size(), width, height, greyscaled, debug);
 }

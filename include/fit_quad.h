@@ -19,9 +19,9 @@ inline PeakExtents reduce_extents(const PeakExtents &a, const PeakExtents &b) {
 }
 
 struct Corner {
-    double error;
     uint32_t line_fit_point_index;
     uint16_t cluster_index;
+    float error;
 };
 
 struct FittedQuad {
@@ -40,8 +40,8 @@ std::tuple<LineFitPoint, size_t> get_moment(const LineFitPoint *points,
                                             size_t points_size, size_t i0,
                                             size_t i1);
 
-void fit_line(LineFitPoint moment, size_t num_in_moment, double *line_params,
-              double *err, double *mse);
+void fit_line(LineFitPoint moment, size_t num_in_moment, float *line_params,
+              float *err, float *mse);
 
 void fit_lines(sycl::queue &q, const LineFitPoint *points,
                const uint16_t *cluster_indices,

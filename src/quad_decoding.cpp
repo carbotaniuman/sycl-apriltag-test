@@ -75,8 +75,7 @@ zarray_t *quad_decode_task(QuadCorners& data, image_u8_t *im) {
 }
 
 void decode_quads(const QuadCorners *corner_data, size_t corner_data_length,
-                            size_t width, size_t height, uint8_t *greyscaled) {
-    std::cout << "TEST" << std::endl;
+                            size_t width, size_t height, uint8_t *greyscaled, bool debug) {
     image_u8_t im_orig{
         .width = static_cast<int32_t>(width),
         .height = static_cast<int32_t>(height),
@@ -95,31 +94,35 @@ void decode_quads(const QuadCorners *corner_data, size_t corner_data_length,
         size_t det_size = zarray_size(ret);
         found += det_size;
 
-        for (size_t j = 0; j < det_size; j++) {
-            apriltag_detection_t *detected;
-            zarray_get(ret, j, &detected);
-            std::cout << reinterpret_cast<uint64_t>(detected) << std::endl;
-            std::cout << "decoded id " << detected->id << std::endl;
+        if (debug) {
+            for (size_t j = 0; j < det_size; j++) {
+                apriltag_detection_t *detected;
+                zarray_get(ret, j, &detected);
+                std::cout << reinterpret_cast<uint64_t>(detected) << std::endl;
+                std::cout << "decoded id " << detected->id << std::endl;
 
-            for (int k = 0; k < 4; k++) {
-                image_u8_draw_line(writer, curr.corners[k][0], curr.corners[k][1],
-                                        curr.corners[(k + 1) % 4][0], curr.corners[(k + 1) % 4][1], width,
+                for (int k = 0; k < 4; k++) {
+                    image_u8_draw_line(writer, curr.corners[k][0], curr.corners[k][1],
+                                            curr.corners[(k + 1) % 4][0], curr.corners[(k + 1) % 4][1], width,
+                                                height);
+                }
+
+                for (int k = 0; k < 4; k++) {
+                    image_u8_draw_line(writez, detected->p[k][0], detected->p[k][1],
+                                            detected->p[(k + 1) % 4][0], detected->p[(k + 1) % 4][1], width,
                                             height);
-            }
-
-            for (int k = 0; k < 4; k++) {
-                image_u8_draw_line(writez, detected->p[k][0], detected->p[k][1],
-                                        detected->p[(k + 1) % 4][0], detected->p[(k + 1) % 4][1], width,
-                                           height);
+                }
             }
         }
     }
 
-    stbi_write_png("decoded.png", width, height, 3, writez,
+    if (debug) {
+        stbi_write_png("decoded.png", width, height, 3, writez,
                            width * 3);
 
-    stbi_write_png("decoded1.png", width, height, 3, writer,
+        stbi_write_png("decoded1.png", width, height, 3, writer,
                            width * 3);
+    }
 
     std::cout << "found " << found << " detections" << std::endl;
 }

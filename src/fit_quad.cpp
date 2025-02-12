@@ -8,7 +8,7 @@
 #include <oneapi/dpl/execution>
 #include <oneapi/dpl/iterator>
 
-constexpr double MAX_LINE_FIT_MSE = 10.0;
+constexpr float MAX_LINE_FIT_MSE = 10.0;
 
 // Computed via AprilTag stuff and then dumped here.
 constexpr size_t POINTS_PER_END = 3;
@@ -38,41 +38,58 @@ std::tuple<LineFitPoint, size_t> get_moment(const LineFitPoint *points,
     return std::make_tuple(result, total_elems);
 }
 
-void fit_line(LineFitPoint moment, size_t num_in_moment, double *line_params,
-              double *err, double *mse) {
-    double Ex = moment.Mx / moment.W;
-    double Ey = moment.My / moment.W;
-    double Cxx = moment.Mxx / moment.W - Ex * Ex;
-    double Cxy = moment.Mxy / moment.W - Ex * Ey;
-    double Cyy = moment.Myy / moment.W - Ey * Ey;
+void fit_line(LineFitPoint moment, size_t num_in_moment, float *line_params,
+              float *err, float *mse) {
+    // These M* values are double what they should be due to the transform
+    // we made converting them to integers, but we divide them out so it should
+    // not be an issue.
 
-    double dist = std::hypot(Cxx - Cyy, 2 * Cxy);
-    double eig_err = 0.5 * (Cxx + Cyy - dist);
+    // Both sides are now scaled by (4 * W^2),
+    // which means we can extract the real
+    // value by dividing.
+    int64_t Csxx = moment.Mxx * moment.W - moment.Mx * moment.Mx;
+    int64_t Csxy = moment.Mxy * moment.W - moment.Mx * moment.My;
+    int64_t Csyy = moment.Myy * moment.W - moment.My * moment.My;
+
+    int64_t correction_factor = moment.W * moment.W * 4;
+    
+    // This hypot is now scaled by (4 * W^2) over
+    // the real value.
+    float sdist = std::hypotf(Csxx - Csyy, 2 * Csxy);
+    // We want half of the value, so divide by the correction factor
+    // and then divide by a further 2.
+    float eig_err = (Csxx + Csyy - sdist) / (correction_factor * 2);
+
 
     if (line_params) {
-        line_params[0] = Ex;
-        line_params[1] = Ey;
+        // double eig = 0.5 * (Cxx + Cyy + dist);
+        // double nx1 = Cxx - eig;
 
-        double eig = 0.5 * (Cxx + Cyy + dist);
-        double nx1 = Cxx - eig;
-        double ny1 = Cxy;
-        double M1 = nx1 * nx1 + ny1 * ny1;
-        double nx2 = Cxy;
-        double ny2 = Cyy - eig;
-        double M2 = nx2 * nx2 + ny2 * ny2;
+        // nx1 = Cxx - (0.5 * Cxx) - (0.5 * Cyy) - (0.5 * dist);
+        // nx1 = (0.5 * Cxx) - (0.5 * Cyy) - (0.5 * dist);
+        // nx1 = 0.5 * (Cxx - Cyy - dist)
 
-        double nx, ny, M;
+        // Scale everything by 2 to reduce operations performed.
+        float nx1 = static_cast<float>(Csxx - Csyy) - sdist;
+        float ny1 = 2 * Csxy;
+        float nx2 = 2 * Csxy;
+        float ny2 = static_cast<float>(Csyy - Csxx) - sdist;
+        float M1 = nx1 * nx1 + ny1 * ny1;
+        float M2 = nx2 * nx2 + ny2 * ny2;
+
+        float nx, ny;
         if (M1 > M2) {
             nx = nx1;
             ny = ny1;
-            M = M1;
         } else {
             nx = nx2;
             ny = ny2;
-            M = M2;
         }
 
-        double length = std::sqrt(M);
+        line_params[0] = static_cast<float>(moment.Mx) / static_cast<float>(moment.W * 2);
+        line_params[1] = static_cast<float>(moment.My) / static_cast<float>(moment.W * 2);
+
+        float length = std::hypotf(nx, ny);
         if (std::fabs(length) < 1e-12) {
             line_params[2] = 0;
             line_params[3] = 0;
@@ -154,13 +171,13 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
          sycl::local_accessor<ClusterExtents> local_cluster_extents{
              sycl::range(TARGETED_WG_SIZE), h};
 
-         sycl::local_accessor<double> calculated_errors_same_cluster{
+         sycl::local_accessor<float> calculated_errors_same_cluster{
              sycl::range(TARGETED_WG_SIZE), h};
-         sycl::local_accessor<double> calculated_errors_diff_cluster{
+         sycl::local_accessor<float> calculated_errors_diff_cluster{
              sycl::range(TARGETED_WG_SIZE), h};
-         sycl::local_accessor<double> filtered_errors_same_cluster{
+         sycl::local_accessor<float> filtered_errors_same_cluster{
              sycl::range(TARGETED_WG_SIZE), h};
-         sycl::local_accessor<double> filtered_errors_diff_cluster{
+         sycl::local_accessor<float> filtered_errors_diff_cluster{
              sycl::range(TARGETED_WG_SIZE), h};
 
          h.parallel_for(
@@ -192,7 +209,7 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
 
                      if (k_size < 2) {
                          calculated_errors_same_cluster[local_linear_id] =
-                             std::numeric_limits<double>::quiet_NaN();
+                             std::numeric_limits<float>::quiet_NaN();
                      } else {
                          size_t i0 = (cur_extent.count + x - cur_extent.start -
                                       k_size) %
@@ -253,7 +270,7 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
 
                          if (k_size < 2) {
                              calculated_errors_diff_cluster[local_linear_id] =
-                                 std::numeric_limits<double>::quiet_NaN();
+                                 std::numeric_limits<float>::quiet_NaN();
                          } else {
                              size_t i0 = (x + their_extent.count -
                                           their_extent.start - k_size) %
@@ -273,7 +290,7 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
                          }
                      } else {
                          calculated_errors_diff_cluster[local_linear_id] =
-                             std::numeric_limits<double>::quiet_NaN();
+                             std::numeric_limits<float>::quiet_NaN();
                      }
                  }
                  // Barrier here to sync both sets of cluster errors.
@@ -283,8 +300,8 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
                  // the filtered errors.
                  if (local_linear_id >= POINTS_PER_END &&
                      local_linear_id < it.get_local_range(0) - POINTS_PER_END) {
-                     double acc = 0.0;
-                     double diff_acc = 0.0;
+                     float acc = 0.0;
+                     float diff_acc = 0.0;
                      for (size_t i = 0; i < FILTER_DATA.size(); i++) {
                          size_t linear_id_to_check =
                              local_linear_id + i - POINTS_PER_END;
@@ -325,7 +342,7 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
                      return;
                  }
 
-                 double cur_error =
+                 float cur_error =
                      filtered_errors_same_cluster[local_linear_id];
 
                  // If our cluster is the same as the appropirate point, check
@@ -349,9 +366,9 @@ void fit_lines(sycl::queue &q, const LineFitPoint *points,
                           : filtered_errors_diff_cluster)[local_linear_id + 1];
 
                  Corner maybe = {
-                     cur_error,
                      static_cast<uint32_t>(x - cur_extent.start),
                      cur_cluster_index,
+                     cur_error,
                  };
 
                  if (greater_before && greater_after) {
@@ -383,7 +400,7 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
     constexpr size_t CHOSEN_PER_EXTENT = 256;
     constexpr size_t TARGETED_WG_SIZE = 32;
 
-    double cos_critical_rad = std::cos(10 * M_PI / 180);
+    float cos_critical_rad = std::cos(10 * M_PI / 180);
     // laucnh 2d kernel {extents_count, 10 choose 4};
     q.parallel_for(
          sycl::nd_range(sycl::range(extents_count, CHOSEN_PER_EXTENT),
@@ -400,7 +417,7 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      sycl::min(peak_extent.count, static_cast<uint32_t>(10)),
                      4);
 
-             double total_err = 0.0;
+             float total_err = 0.0;
              bool is_valid_fit = is_valid_combination;
 
              std::array<LineFitPoint, 4> moments{};
@@ -423,8 +440,8 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                          .line_fit_point_index};
                  sort_4(line_fit_indices);
 
-                 std::array<double, 4> params01;
-                 std::array<double, 4> params12;
+                 std::array<float, 4> params01;
+                 std::array<float, 4> params12;
 
                  LineFitPoint m0, m1, m2, m3;
                  uint16_t nim0, nim1, nim2, nim3;
@@ -433,7 +450,7 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      auto [moment, num_in_moment] =
                          get_moment(points + cur_extent.start, cur_extent.count,
                                     line_fit_indices[0], line_fit_indices[1]);
-                     double err, mse;
+                     float err, mse;
                      fit_line(moment, num_in_moment, params01.data(), &err,
                               &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
@@ -446,7 +463,7 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      auto [moment, num_in_moment] =
                          get_moment(points + cur_extent.start, cur_extent.count,
                                     line_fit_indices[1], line_fit_indices[2]);
-                     double err, mse;
+                     float err, mse;
                      fit_line(moment, num_in_moment, params12.data(), &err,
                               &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
@@ -459,7 +476,7 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      auto [moment, num_in_moment] =
                          get_moment(points + cur_extent.start, cur_extent.count,
                                     line_fit_indices[2], line_fit_indices[3]);
-                     double err, mse;
+                     float err, mse;
                      fit_line(moment, num_in_moment, nullptr, &err, &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
                      moments[2] = moment;
@@ -471,7 +488,7 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      auto [moment, num_in_moment] =
                          get_moment(points + cur_extent.start, cur_extent.count,
                                     line_fit_indices[3], line_fit_indices[0]);
-                     double err, mse;
+                     float err, mse;
                      fit_line(moment, num_in_moment, nullptr, &err, &mse);
                      is_valid_fit &= mse <= MAX_LINE_FIT_MSE;
                      moments[3] = moment;
@@ -479,19 +496,19 @@ void do_indexing(sycl::queue &q, const PeakExtents *extents,
                      total_err += err;
                  }
 
-                 double dot =
+                 float dot =
                      params01[2] * params12[2] + params01[3] * params12[3];
 
                  is_valid_fit &= std::fabs(dot) <= cos_critical_rad;
              }
 
-             double current_err = is_valid_fit
+             float current_err = is_valid_fit
                                       ? total_err
-                                      : std::numeric_limits<double>::infinity();
-             double lowest_err = sycl::reduce_over_group(
+                                      : std::numeric_limits<float>::infinity();
+             float lowest_err = sycl::reduce_over_group(
                  it.get_group(), current_err, sycl::minimum<>());
 
-             if (lowest_err == std::numeric_limits<double>::infinity()) {
+             if (lowest_err == std::numeric_limits<float>::infinity()) {
                  return;
              }
 
