@@ -367,7 +367,7 @@ int main(int argc, char *argv[]) {
             q.wait();
             
             dumpPlainToCSV(scratch_labels_out, width * height, "outneg1.csv");
-            dumpPlainToCSV(label_buffer, width * height, "outneg2.csv");
+            dumpPlainToCSV(labels_out, width * height, "outneg2.csv");
             dumpPlainToCSV(sizes_out, width * height, "outneg3.csv");
 
             uint32_t *colors = new uint32_t[width * height];
