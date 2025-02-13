@@ -835,7 +835,7 @@ int main(int argc, char *argv[]) {
 
         auto compacted_corners_end = oneapi::dpl::copy_if(
             policy_e, found_corners_buffer,
-            found_corners_buffer + width * height * 4, compacted_corners,
+            found_corners_buffer + filtered_points_count, compacted_corners,
             [](const Corner &p) { return p.error != 0; });
         size_t compacted_corner_count =
             std::distance(compacted_corners, compacted_corners_end);
