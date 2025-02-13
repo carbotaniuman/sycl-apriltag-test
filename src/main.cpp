@@ -368,7 +368,7 @@ int main(int argc, char *argv[]) {
             
             dumpPlainToCSV(scratch_labels_out, width * height, "outneg1.csv");
             dumpPlainToCSV(label_buffer, width * height, "outneg2.csv");
-            dumpPlainToCSV(label_sizes_buffer, width * height, "outneg3.csv");
+            dumpPlainToCSV(sizes_out, width * height, "outneg3.csv");
 
             uint32_t *colors = new uint32_t[width * height];
             uint8_t *images = new uint8_t[width * height * 3];
@@ -479,7 +479,7 @@ int main(int argc, char *argv[]) {
             std::distance(compacted_points, compacted_points_end);
         size_t compacted_points_count2 =
             std::distance(compacted_points, compacted_points_end);
-        std::cout << compacted_points_count << "!!!" << compacted_points_count2 << std::endl;
+
         if (prog) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
