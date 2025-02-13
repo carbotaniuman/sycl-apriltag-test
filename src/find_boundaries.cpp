@@ -21,10 +21,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
     // additional dimensions in order to get enough work items to process our image.
     size_t dispatch_height = (height + block_height_work_done - 1) / block_height_work_done * block_height;
     size_t dispatch_width = (width + block_width_work_done - 1) / block_width_work_done * block_width;
-
-    std::cout << dispatch_height << " " << dispatch_width << std::endl;
-    std::cout << (dispatch_height / block_height) << " " << (dispatch_width / block_width) << std::endl;
-    std::cout << (dispatch_height % block_height) << " " << (dispatch_width % block_width) << std::endl;
+    
     auto init_event = q.submit([=](sycl::handler &h) {
         h.depends_on(deps);
         sycl::local_accessor<uint32_t, 2> shared_labels{sycl::range(block_height, block_width), h};
