@@ -12,42 +12,44 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                             uint64_t *blob_labels,
                             size_t width, size_t height,
                             const std::vector<sycl::event> &deps) {
-    // The boundaries operation is done in blocks of 4 wide x 3 high, where only
-    // the top-middle 2 x 2 blocks are actually updated - this reduces extra
-    // memory reads by a factor of 2 compaired to the naive approach.
-    //
-    // This means we need 2 times the width and 1.5 times the height of work
-    // items. Mapping this back to the proper indices is the responsibility of
-    // user code.
+    constexpr size_t block_height = 8;
+    constexpr size_t block_height_work_done = block_height - 1;
+    constexpr size_t block_width = 32;
+    constexpr size_t block_width_work_done = block_width - 2;
+    // The boundaries operation is done in blocks, where the rows on either side
+    // and the columns at the bottom are ignored. This means we need to dispatch
+    // additional dimensions in order to get enough work items to process our image.
+    size_t dispatch_height = (height * block_height + block_height_work_done - 1) / block_height_work_done;
+    size_t dispatch_width = (width * block_width + block_width_work_done - 1) / block_width_work_done;
     auto init_event = q.submit([=](sycl::handler &h) {
         h.depends_on(deps);
-        sycl::local_accessor<uint32_t, 2> shared_labels{sycl::range(3, 4), h};
+        sycl::local_accessor<uint32_t, 2> shared_labels{sycl::range(block_height, block_width), h};
 
         h.parallel_for(
-            sycl::nd_range(sycl::range(height * 3 / 2, width * 2),
-                           sycl::range(3, 4)),
+            sycl::nd_range(sycl::range(dispatch_height, dispatch_width),
+                           sycl::range(block_height, block_width)),
             [=](sycl::nd_item<2> it) {
                 // Derived x' = x - a*(x//b) - o
                 // x = global index, x' = memory access index
                 // a = block overlap size, b = block size
                 size_t x = it.get_group(1) * (it.get_local_range(1) - 2) +
-                           it.get_local_id(1) - 1;
+                           it.get_local_id(1);
                 size_t y = it.get_group(0) * (it.get_local_range(0) - 1) +
-                           it.get_local_id(0) - 1;
+                           it.get_local_id(0);
                 
                 size_t linear_id = y * width + x;
 
                 size_t local_linear_id = it.get_local_linear_id();
                 size_t local_width = it.get_local_range(1);
 
-                auto shared_ptr = shared_labels.get_pointer();
+                auto shared_label_ptr = shared_labels.get_pointer();
                 uint32_t local_label_img;
 
                 // Bog standards bounds check.
-                if (x < 0 || x >= width || y < 0 || y >= width) {
-                    local_label_img = shared_ptr[local_linear_id] = 0;
+                if (x >= width || y >= height) {
+                    local_label_img = shared_label_ptr[local_linear_id] = 0;
                 } else {
-                    local_label_img = shared_ptr[local_linear_id] =
+                    local_label_img = shared_label_ptr[local_linear_id] =
                         labels[linear_id];
                 }
 
@@ -70,6 +72,10 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                     return;
                 }
 
+                if (x >= width || y >= height) {
+                    return;
+                }
+
                 uint32_t local_label = local_label_img & LABEL_VALUE_MASK;
 
                 bool local_label_too_small = sizes[local_label] < 25;
@@ -79,7 +85,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                                              size_t point_offset,
                                              HalfPixel half_pixel) {
                     uint32_t test_label_img =
-                        shared_ptr[local_linear_id + pixel_dy * local_width +
+                        shared_label_ptr[local_linear_id + pixel_dy * local_width +
                                    pixel_dx];
 
                     uint32_t test_other = test_label_img & LABEL_PIXEL_MASK;
@@ -125,10 +131,10 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                 // understand, this is really important and results in 2-wide
                 // borders otherwise, which messes with the quad detection.
                 {
-                    uint32_t left_label_img = shared_ptr[local_linear_id - 1];
+                    uint32_t left_label_img = shared_label_ptr[local_linear_id - 1];
                     uint32_t test_left = left_label_img & LABEL_PIXEL_MASK;
                     uint32_t down_label_img =
-                        shared_ptr[local_linear_id + local_width];
+                        shared_label_ptr[local_linear_id + local_width];
                     uint32_t test_down = down_label_img & LABEL_PIXEL_MASK;
 
                     bool would_duplicate =
