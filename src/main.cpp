@@ -282,7 +282,6 @@ int main(int argc, char *argv[]) {
     auto compacted_blob_labels =
         sycl::malloc_device<uint64_t>(width * height * 4, q);
     size_t sizes_elems = 1 << 16;
-    auto trash_keys_buffer = sycl::malloc_device<uint32_t>(sizes_elems, q);
     auto values_buffer = sycl::malloc_device<ClusterBounds>(sizes_elems, q);
     auto filtered_values_buffer =
         sycl::malloc_device<ClusterBounds>(sizes_elems, q);
@@ -578,7 +577,7 @@ int main(int argc, char *argv[]) {
         auto values_start = reinterpret_cast<sycl::vec<int64_t, 4>*>(values_buffer);
         auto [keys_end, values_end] = oneapi::dpl::reduce_by_segment(
             policy_e, compacted_blob_labels, compacted_blob_labels + compacted_points_count,
-            transform_values, trash_keys_buffer, values_start,
+            transform_values, oneapi::dpl::discard_iterator(), values_start,
             std::equal_to<>(), [](const auto &left, const auto &right) {
                 return sycl::bit_cast<sycl::vec<int64_t, 4>>(reduce_bounds(sycl::bit_cast<ClusterBounds>(left), sycl::bit_cast<ClusterBounds>(right)));
             });
@@ -889,7 +888,7 @@ int main(int argc, char *argv[]) {
             oneapi::dpl::reduce_by_segment(
                 policy_e, transform_corner_keys,
                 transform_corner_keys + compacted_corner_count,
-                transform_corner_values, trash_keys_buffer,
+                transform_corner_values, oneapi::dpl::discard_iterator(),
                 cluster_data_new_buffer, std::equal_to<>(),
                 [](const auto &left, const auto &right) {
                     return reduce_extents(left, right);
