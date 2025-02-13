@@ -4,10 +4,6 @@
 #include <tuple>
 #include <type_traits>
 
-#include <oneapi/dpl/algorithm>
-#include <oneapi/dpl/execution>
-#include <oneapi/dpl/iterator>
-
 constexpr float MAX_LINE_FIT_MSE = 10.0;
 
 // Computed via AprilTag stuff and then dumped here.

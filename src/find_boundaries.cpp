@@ -4,12 +4,13 @@
 // This implementation of finding boundaries is similar to the
 // one AprilTag uses, with some modifications made to facilitate
 // efficient GPU computation. Of particular note is the output
-// format. Instead of using a hashmap, the labels are concatenated
-// along with the data.
+// format. Instead of using a hashmap, the labels are stored
+// in a parallel array.
 
-sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
-                            const HashTable::Entry *sizes,
-                            BoundaryPoint *points, size_t width, size_t height,
+sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
+                            const uint32_t *sizes, BoundaryPoint *points,
+                            uint64_t *blob_labels,
+                            size_t width, size_t height,
                             const std::vector<sycl::event> &deps) {
     // The boundaries operation is done in blocks of 4 wide x 3 high, where only
     // the top-middle 2 x 2 blocks are actually updated - this reduces extra
@@ -20,7 +21,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
     // user code.
     auto init_event = q.submit([=](sycl::handler &h) {
         h.depends_on(deps);
-        sycl::local_accessor<uint16_t, 2> shared_labels{sycl::range(3, 4), h};
+        sycl::local_accessor<uint32_t, 2> shared_labels{sycl::range(3, 4), h};
 
         h.parallel_for(
             sycl::nd_range(sycl::range(height * 3 / 2, width * 2),
@@ -33,7 +34,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
                            it.get_local_id(1) - 1;
                 size_t y = it.get_group(0) * (it.get_local_range(0) - 1) +
                            it.get_local_id(0) - 1;
-
+                
                 size_t linear_id = y * width + x;
 
                 size_t local_linear_id = it.get_local_linear_id();
@@ -69,10 +70,9 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
                     return;
                 }
 
-                uint16_t local_label =
-                    static_cast<uint16_t>(local_label_img & LABEL_VALUE_MASK);
+                uint32_t local_label = local_label_img & LABEL_VALUE_MASK;
 
-                bool local_label_too_small = sizes[local_label].value < 25;
+                bool local_label_too_small = sizes[local_label] < 25;
                 uint32_t test_local = local_label_img & LABEL_PIXEL_MASK;
 
                 auto handle_pixel_test = [&](int pixel_dy, int pixel_dx,
@@ -85,11 +85,10 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
                     uint32_t test_other = test_label_img & LABEL_PIXEL_MASK;
 
                     if (test_other != test_local) {
-                        uint16_t test_label = static_cast<uint16_t>(
-                            test_label_img & LABEL_VALUE_MASK);
+                        uint32_t test_label = test_label_img & LABEL_VALUE_MASK;
 
                         bool test_label_too_small =
-                            sizes[test_label].value < 25;
+                            sizes[test_label] < 25;
 
                         BoundaryPoint maybe{
                             pack_half_pixel(x, half_pixel),
@@ -98,10 +97,14 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
                             (test_other > test_local)
                                 ? static_cast<uint16_t>(
                                       (COORDINATE_COLOR_DIRECTION_MASK | y))
-                                : static_cast<uint16_t>(y),
-                            sycl::min(local_label, test_label),
-                            sycl::max(local_label, test_label),
+                                : static_cast<uint16_t>(y),                        
                         };
+
+                        uint64_t blob_label = 
+                            (
+                                (static_cast<uint64_t>(sycl::min(local_label, test_label)) << 32) |
+                                static_cast<uint64_t>(sycl::max(local_label, test_label))
+                            );
 
                         // Supposedly this let's us do coalesced memory stores
                         // which is super cool and performant.
@@ -110,6 +113,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
 
                         if (!local_label_too_small && !test_label_too_small) {
                             points[output_index] = maybe;
+                            blob_labels[output_index] = blob_label;
                         }
                     }
                 };
@@ -129,8 +133,8 @@ sycl::event find_boundaries(sycl::queue &q, const uint16_t *labels,
 
                     bool would_duplicate =
                         test_left != test_down &&
-                        sizes[left_label_img & LABEL_VALUE_MASK].value >= 25 &&
-                        sizes[down_label_img & LABEL_VALUE_MASK].value >= 25;
+                        sizes[left_label_img & LABEL_VALUE_MASK] >= 25 &&
+                        sizes[down_label_img & LABEL_VALUE_MASK] >= 25;
                     if (!would_duplicate) {
                         handle_pixel_test(1, -1, 1, HalfPixel::BOTTOM_LEFT);
                     }

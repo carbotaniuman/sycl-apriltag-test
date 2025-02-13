@@ -35,10 +35,6 @@ struct BoundaryPoint {
     // x is packed as [COLOR_DIRECTION : 1, unused : 1, VALUE : 14]
     uint16_t packed_y;
 
-    uint16_t first_blob;
-    uint16_t second_blob;
-
-    uint32_t blob_label() const { return (first_blob << 16) | second_blob; }
     bool is_black_to_white() const {
         return packed_y & COORDINATE_COLOR_DIRECTION_MASK;
     }
@@ -97,30 +93,6 @@ struct BoundaryPoint {
     int16_t gx() const { return is_black_to_white() ? dx() : -dx(); }
 
     int16_t gy() const { return is_black_to_white() ? dy() : -dy(); }
-
-    bool operator==(const BoundaryPoint &other) const {
-        if (packed_x != other.packed_x) {
-            return false;
-        }
-
-        if (packed_y != other.packed_y) {
-            return false;
-        }
-
-        if (first_blob != other.first_blob) {
-            return false;
-        }
-
-        if (second_blob != other.second_blob) {
-            return false;
-        }
-
-        return true;
-    }
-
-    bool operator!=(const BoundaryPoint &other) const {
-        return !(*this == other);
-    }
 };
 
 // The struct has both 0 and UINT64_MAX as invalid states,

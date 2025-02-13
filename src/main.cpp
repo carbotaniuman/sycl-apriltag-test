@@ -179,7 +179,8 @@ void dumpExtentLikeToCSV(const ExtentLike *extents, size_t size,
     std::cout << "CSV file '" << filename << "' has been written.\n";
 }
 
-void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints, size_t size,
+void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints,
+                             const uint64_t *blob_labels, size_t size,
                              const std::string &filename) {
     // Open the CSV file for writing
     std::ofstream csvFile(filename);
@@ -197,7 +198,7 @@ void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints, size_t size,
     for (size_t i = 0; i < size; ++i) {
         const auto &point = boundaryPoints[i];
         csvFile << point.x_value() << "," << point.y_value() << ","
-                << point.blob_label() << ","
+                << blob_labels[i] << ","
                 << point.is_black_to_white() << "," << point.dx() << ","
                 << point.dy() << "\n";
     }
@@ -270,13 +271,17 @@ int main(int argc, char *argv[]) {
     auto thresholded_buffer = sycl::malloc_device<uint8_t>(width * height, q);
     auto scratch_label_buffer =
         sycl::malloc_device<uint32_t>(width * height, q);
-    auto label_buffer = sycl::malloc_device<uint16_t>(width * height, q);
-    size_t sizes_elems = 1 << 15;
-    auto sizes_buffer = sycl::malloc_device<HashTable::Entry>(sizes_elems, q);
+    auto label_buffer = sycl::malloc_device<uint32_t>(width * height, q);
+    auto label_sizes_buffer = sycl::malloc_device<uint32_t>(width * height, q);
     auto points_buffer =
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
+    auto blob_labels_buffer =
+        sycl::malloc_device<uint64_t>(width * height * 4, q);
     auto compacted_points =
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
+    auto compacted_blob_labels =
+        sycl::malloc_device<uint64_t>(width * height * 4, q);
+    size_t sizes_elems = 1 << 16;
     auto trash_keys_buffer = sycl::malloc_device<uint32_t>(sizes_elems, q);
     auto values_buffer = sycl::malloc_device<ClusterBounds>(sizes_elems, q);
     auto filtered_values_buffer =
@@ -302,9 +307,11 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < 1; i++) {
         auto zero_sizes =
-            q.memset(sizes_buffer, 0, sizes_elems * sizeof(HashTable::Entry));
+            q.memset(label_sizes_buffer, 0, sizes_elems * sizeof(uint32_t));
         auto zero_points = q.memset(points_buffer, 0,
                                     width * height * 4 * sizeof(BoundaryPoint));
+        auto fill_blob_labels = q.memset(blob_labels_buffer, 0xFF,
+                                    width * height * 4 * sizeof(uint64_t));
         auto zero_corners = q.memset(found_corners_buffer, 0,
                                      width * height * 4 * sizeof(Corner));
         auto zero_quads =
@@ -338,7 +345,7 @@ int main(int argc, char *argv[]) {
 
         auto segment = image_segmentation(
             q, thresholded_buffer, scratch_label_buffer, label_buffer,
-            sizes_buffer, sizes_elems, width, height,
+            label_sizes_buffer, sizes_elems, width, height,
             {threshold, zero_sizes});
         segment.wait();
 
@@ -351,15 +358,17 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto scratch_labels_out = new uint32_t[width * height];
-            auto labels_out = new uint16_t[width * height];
-            auto sizes_out = new HashTable::Entry[sizes_elems];
+            auto labels_out = new uint32_t[width * height];
+            auto sizes_out = new uint32_t[sizes_elems];
 
             q.copy(scratch_label_buffer, scratch_labels_out, width * height, segment);
             q.copy(label_buffer, labels_out, width * height, segment);
-            q.copy(sizes_buffer, sizes_out, sizes_elems, segment);
+            q.copy(label_sizes_buffer, sizes_out, sizes_elems, segment);
             q.wait();
             
             dumpPlainToCSV(scratch_labels_out, width * height, "outneg1.csv");
+            dumpPlainToCSV(label_buffer, width * height, "outneg2.csv");
+            dumpPlainToCSV(label_sizes_buffer, width * height, "outneg3.csv");
 
             uint32_t *colors = new uint32_t[width * height];
             uint8_t *images = new uint8_t[width * height * 3];
@@ -375,7 +384,7 @@ int main(int argc, char *argv[]) {
                     uint8_t r = color >> 16, g = color >> 8, b = color;
 
                     if (color == 0 && v != 0) {
-                        if (sizes_out[v].value < 25) {
+                        if (sizes_out[v] < 25) {
                             r = 0;
                             g = 0;
                             b = 0;
@@ -398,8 +407,8 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        auto boundaries = find_boundaries(q, label_buffer, sizes_buffer, points_buffer, width, height,
-                                          {segment, zero_points});
+        auto boundaries = find_boundaries(q, label_buffer, label_sizes_buffer, points_buffer, blob_labels_buffer, width, height,
+                                          {segment, zero_points, fill_blob_labels});
         boundaries.wait();
 
         if (prog) {
@@ -411,17 +420,18 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[width * height * 4]();
+            auto blob_labels_out = new uint64_t[width * height * 4]();
             q.copy(points_buffer, points_out, width * height * 4, boundaries);
+            q.copy(blob_labels_buffer, blob_labels_out, width * height * 4, boundaries);
             q.wait();
 
-            dumpBoundaryPointsToCSV(points_out, width * height * 4,
+            dumpBoundaryPointsToCSV(points_out, blob_labels_out, width * height * 4,
                                     "out0.csv");
 
             size_t present = 0;
             size_t zeroes = 0;
             for (size_t i = 0; i < width * height * 4; i++) {
-                if (points_out[i] ==
-                    sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
+                if (sycl::bit_cast<uint32_t>(points_out[i]) == 0) {
                     zeroes++;
                     continue;
                 }
@@ -433,14 +443,15 @@ int main(int argc, char *argv[]) {
 
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
             for (size_t i = 0; i < width * height * 4; i++) {
-                if (points_out[i] ==
-                    sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
+                if (sycl::bit_cast<uint32_t>(points_out[i]) == 0) {
                     continue;
                 }
 
                 auto x = points_out[i].x_value();
                 auto y = points_out[i].y_value();
-                auto label = points_out[i].blob_label();
+                auto label = blob_labels_out[i];
+
+                // std::cout << points_out[i].packed_x << " " << points_out[i].packed_y << std::endl;
 
                 cluster_image[(y * width + x) * 3 + 0] = 0;
                 cluster_image[(y * width + x) * 3 + 1] = 0;
@@ -452,15 +463,23 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
+        auto compacted_blob_labels_end = oneapi::dpl::copy_if(
+            policy_e, blob_labels_buffer, blob_labels_buffer + width * height * 4,
+            compacted_blob_labels, [](uint64_t p) {
+                return p != std::numeric_limits<uint64_t>::max();
+            });
+
         auto compacted_points_end = oneapi::dpl::copy_if(
             policy_e, points_buffer, points_buffer + width * height * 4,
             compacted_points, [](BoundaryPoint p) {
-                return p !=
-                       sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0));
+                return sycl::bit_cast<uint32_t>(p) != 0;
             });
 
         size_t compacted_points_count =
             std::distance(compacted_points, compacted_points_end);
+        size_t compacted_points_count2 =
+            std::distance(compacted_points, compacted_points_end);
+        std::cout << compacted_points_count << "!!!" << compacted_points_count2 << std::endl;
         if (prog) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
@@ -470,21 +489,22 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[width * height * 4]();
+            auto blob_labels_out = new uint64_t[width * height * 4]();
             q.copy(compacted_points, points_out, width * height * 4);
+            q.copy(compacted_blob_labels, blob_labels_out, width * height * 4);
             q.wait();
-            dumpBoundaryPointsToCSV(points_out, compacted_points_count,
+            dumpBoundaryPointsToCSV(points_out, blob_labels_out, compacted_points_count,
                                     "out1.csv");
 
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
             for (size_t i = 0; i < compacted_points_count; i++) {
-                if (points_out[i] ==
-                    sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
+                if (sycl::bit_cast<uint32_t>(points_out[i]) == 0) {
                     break;
                 }
 
                 auto x = points_out[i].x_value();
                 auto y = points_out[i].y_value();
-                auto label = points_out[i].blob_label();
+                auto label = blob_labels_out[i];
 
                 cluster_image[(y * width + x) * 3 + 0] = 0;
                 cluster_image[(y * width + x) * 3 + 1] = 0;
@@ -496,11 +516,10 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        oneapi::dpl::sort(policy_e, compacted_points,
-                          compacted_points + compacted_points_count,
-                          [](const auto &left, const auto &right) {
-                              return left.blob_label() < right.blob_label();
-                          });
+        oneapi::dpl::sort_by_key(policy_e,
+                          compacted_blob_labels,
+                          compacted_blob_labels + compacted_points_count,
+                          compacted_points);
 
         if (prog) {
             auto duration =
@@ -511,22 +530,23 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[compacted_points_count]();
+            auto blob_labels_out = new uint64_t[compacted_points_count]();
             q.copy(compacted_points, points_out, compacted_points_count);
+            q.copy(compacted_blob_labels, blob_labels_out, compacted_points_count);
             q.wait();
 
-            dumpBoundaryPointsToCSV(points_out, compacted_points_count,
+            dumpBoundaryPointsToCSV(points_out, blob_labels_out, compacted_points_count,
                                     "out2.csv");
 
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
             std::unordered_map<uint32_t, uint32_t> vs{};
             for (size_t i = 0; i < compacted_points_count; i++) {
-                if (points_out[i] ==
-                    sycl::bit_cast<BoundaryPoint>(static_cast<uint64_t>(0))) {
+                if (sycl::bit_cast<uint32_t>(points_out[i]) == 0) {
                     std::cout << "???" << std::endl;
                     break;
                 }
 
-                uint32_t label = points_out[i].blob_label();
+                uint32_t label = blob_labels_out[i];
 
                 uint32_t color = 0;
                 if (auto found = vs.find(label); found != vs.end()) {
@@ -552,9 +572,6 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        auto transform_keys = dpl::make_transform_iterator(
-            compacted_points, [](BoundaryPoint a) { return a.blob_label(); });
-
         auto transform_values = dpl::make_transform_iterator(
             dpl::make_zip_iterator(compacted_points,
                                    dpl::counting_iterator<uint32_t>(0)),
@@ -565,7 +582,7 @@ int main(int argc, char *argv[]) {
 
         auto values_start = reinterpret_cast<sycl::vec<int64_t, 4>*>(values_buffer);
         auto [keys_end, values_end] = oneapi::dpl::reduce_by_segment(
-            policy_e, transform_keys, transform_keys + compacted_points_count,
+            policy_e, compacted_blob_labels, compacted_blob_labels + compacted_points_count,
             transform_values, trash_keys_buffer, values_start,
             std::equal_to<>(), [](const auto &left, const auto &right) {
                 return sycl::bit_cast<sycl::vec<int64_t, 4>>(reduce_bounds(sycl::bit_cast<ClusterBounds>(left), sycl::bit_cast<ClusterBounds>(right)));

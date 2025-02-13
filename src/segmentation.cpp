@@ -89,8 +89,8 @@ internal_compress_labels(sycl::queue &q, uint32_t *white_uf_ptr, uint32_t *black
 // kernel args should half height and width of images:
 // top left of each 2x2 block
 sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
-                               uint32_t *label_scratch, uint16_t *labels,
-                               HashTable::Entry *sizes, size_t sizes_elem,
+                               uint32_t *label_scratch, uint32_t *labels,
+                               uint32_t *sizes, size_t sizes_elem,
                                size_t width, size_t height,
                                const std::vector<sycl::event> &deps) {
     uint32_t * white_uf_ptr = label_scratch + (width * height / 4) * 0;
@@ -310,7 +310,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
     auto final_labelling_event = q.parallel_for(
         sycl::range(height / 2, width / 2), compression_event,
         [white_uf_ptr, black_uf_ptr, information_bytes, labels, sizes, sizes_elem](sycl::item<2> it) {
-            HashTable table{sizes, sizes_elem};
+            using atomic_elem_ref = sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope_device>;
             size_t width = it.get_range(1) * 2;
             size_t height = it.get_range(0) * 2;
 
@@ -320,23 +320,19 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             size_t image_linear_id = y * width + x;
             size_t kernel_linear_id = it.get_linear_id();
 
-            uint32_t label_255 = white_uf_ptr[kernel_linear_id];
-            uint32_t label_0 = black_uf_ptr[kernel_linear_id];
+            uint32_t label_255 = white_uf_ptr[kernel_linear_id] + 1;
+            uint32_t label_0 = (width * height / 4) + black_uf_ptr[kernel_linear_id] + 1;
 
             uint16_t information_byte = information_bytes[kernel_linear_id];
 
             uint32_t count_255 =
                 sycl::popcount(information_byte & BkeBitmap::BITMASK_POS_255);
-            if (count_255 != 0) {
-                label_255 = table.insert_add<sycl::memory_scope_device>(
-                    label_255, count_255);
-            }
+            atomic_elem_ref size_255_ref{sizes[label_255]};
+            size_255_ref.fetch_add(count_255);
             uint32_t count_0 =
                 sycl::popcount(information_byte & BkeBitmap::BITMASK_POS_0);
-            if (count_0 != 0) {
-                label_0 = table.insert_add<sycl::memory_scope_device>(label_0,
-                                                                      count_0);
-            }
+            atomic_elem_ref size_0_ref{sizes[label_0]};
+            size_0_ref.fetch_add(count_0);
 
             uint32_t top_left, top_right;
 
@@ -374,11 +370,10 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
                 bottom_right = 0;
             }
 
-            reinterpret_cast<uint32_t *>(labels)[image_linear_id / 2] =
-                (top_left << 16 | top_right);
-            reinterpret_cast<uint32_t *>(
-                labels)[(image_linear_id + width) / 2] =
-                (bottom_left << 16 | bottom_right);
+            reinterpret_cast<sycl::vec<uint32_t, 2> *>(labels)[image_linear_id / 2] =
+                sycl::vec(top_left, top_right);
+            reinterpret_cast<sycl::vec<uint32_t, 2> *>(labels)[(image_linear_id + width) / 2] =
+                sycl::vec(bottom_left, bottom_right);
         });
 
     return final_labelling_event;
