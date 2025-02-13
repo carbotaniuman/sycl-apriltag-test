@@ -463,22 +463,17 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        auto compacted_blob_labels_end = oneapi::dpl::copy_if(
-            policy_e, blob_labels_buffer, blob_labels_buffer + width * height * 4,
-            compacted_blob_labels, [](uint64_t p) {
-                return p != std::numeric_limits<uint64_t>::max();
-            });
+        auto blob_label_points = dpl::make_zip_iterator(blob_labels_buffer, points_buffer);
+        auto compacted_blob_label_points = dpl::make_zip_iterator(compacted_blob_labels, compacted_points);
 
-        auto compacted_points_end = oneapi::dpl::copy_if(
-            policy_e, points_buffer, points_buffer + width * height * 4,
-            compacted_points, [](BoundaryPoint p) {
-                return sycl::bit_cast<uint32_t>(p) != 0;
+        auto compacted_blob_label_end = oneapi::dpl::copy_if(
+            policy_e, blob_label_points, blob_label_points + width * height * 4,
+            compacted_blob_label_points, [](const auto& p) {
+                return sycl::bit_cast<uint32_t>(std::get<1>(p)) != 0;
             });
 
         size_t compacted_points_count =
-            std::distance(compacted_points, compacted_points_end);
-        size_t compacted_points_count2 =
-            std::distance(compacted_points, compacted_points_end);
+            std::distance(compacted_blob_label_points, compacted_blob_label_end);
 
         if (prog) {
             auto duration =
