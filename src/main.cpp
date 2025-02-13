@@ -359,11 +359,11 @@ int main(int argc, char *argv[]) {
         if (debug) {
             auto scratch_labels_out = new uint32_t[width * height];
             auto labels_out = new uint32_t[width * height];
-            auto sizes_out = new uint32_t[sizes_elems];
+            auto sizes_out = new uint32_t[width * height];
 
             q.copy(scratch_label_buffer, scratch_labels_out, width * height, segment);
             q.copy(label_buffer, labels_out, width * height, segment);
-            q.copy(label_sizes_buffer, sizes_out, sizes_elems, segment);
+            q.copy(label_sizes_buffer, sizes_out, width * height, segment);
             q.wait();
             
             dumpPlainToCSV(scratch_labels_out, width * height, "outneg1.csv");
