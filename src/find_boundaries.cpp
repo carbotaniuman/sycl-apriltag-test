@@ -1,4 +1,5 @@
 #include "find_boundaries.h"
+#include "label_compacter.h"
 #include "segmentation.h"
 
 // This implementation of finding boundaries is similar to the
@@ -9,7 +10,7 @@
 
 sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                             const uint32_t *sizes, BoundaryPoint *points,
-                            uint64_t *blob_labels,
+                            uint32_t *blob_labels, uint64_t *compacter_buffer,
                             size_t width, size_t height,
                             const std::vector<sycl::event> &deps) {
     constexpr size_t block_height = 8;
@@ -30,6 +31,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
             sycl::nd_range(sycl::range(dispatch_height, dispatch_width),
                            sycl::range(block_height, block_width)),
             [=](sycl::nd_item<2> it) {
+                LabelCompacter compacter{compacter_buffer};
                 // Derived x' = x - a*(x//b) - o
                 // x = global index, x' = memory access index
                 // a = block overlap size, b = block size
@@ -107,7 +109,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                                 : static_cast<uint16_t>(y),                        
                         };
 
-                        uint64_t blob_label = 
+                        uint64_t extended_blob_label = 
                             (
                                 (static_cast<uint64_t>(sycl::min(local_label, test_label)) << 32) |
                                 static_cast<uint64_t>(sycl::max(local_label, test_label))
@@ -120,7 +122,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
 
                         if (!local_label_too_small && !test_label_too_small) {
                             points[output_index] = maybe;
-                            blob_labels[output_index] = blob_label;
+                            blob_labels[output_index] = compacter.lookup<sycl::memory_scope::device>(extended_blob_label);
                         }
                     }
                 };

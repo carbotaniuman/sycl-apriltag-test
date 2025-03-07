@@ -180,7 +180,7 @@ void dumpExtentLikeToCSV(const ExtentLike *extents, size_t size,
 }
 
 void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints,
-                             const uint64_t *blob_labels, size_t size,
+                             const uint32_t *blob_labels, size_t size,
                              const std::string &filename) {
     // Open the CSV file for writing
     std::ofstream csvFile(filename);
@@ -278,12 +278,15 @@ int main(int argc, char *argv[]) {
     auto points_buffer =
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
     auto blob_labels_buffer =
-        sycl::malloc_device<uint64_t>(width * height * 4, q);
+        sycl::malloc_device<uint32_t>(width * height * 4, q);
+    auto label_compacter_buffer =
+        sycl::malloc_device<uint64_t>(1 << 20, q);
     auto compacted_points =
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
     auto compacted_blob_labels =
-        sycl::malloc_device<uint64_t>(width * height * 4, q);
+        sycl::malloc_device<uint32_t>(width * height * 4, q);
     size_t sizes_elems = 1 << 16;
+    auto keys_trash = sycl::malloc_device<uint32_t>(sizes_elems, q);
     auto values_buffer = sycl::malloc_device<ClusterBounds>(sizes_elems, q);
     auto filtered_values_buffer =
         sycl::malloc_device<ClusterBounds>(sizes_elems, q);
@@ -312,7 +315,9 @@ int main(int argc, char *argv[]) {
         auto zero_points = q.memset(points_buffer, 0,
                                     width * height * 4 * sizeof(BoundaryPoint));
         auto fill_blob_labels = q.memset(blob_labels_buffer, 0xFF,
-                                    width * height * 4 * sizeof(uint64_t));
+                                    width * height * 4 * sizeof(uint32_t));
+        auto zero_label_compacter = q.memset(label_compacter_buffer, 0,
+                                    (1 << 20) * sizeof(uint64_t));
         auto zero_corners = q.memset(found_corners_buffer, 0,
                                      width * height * 4 * sizeof(Corner));
         auto zero_quads =
@@ -371,8 +376,8 @@ int main(int argc, char *argv[]) {
             dumpPlainToCSV(labels_out, width * height, "outneg2.csv");
             dumpPlainToCSV(sizes_out, width * height, "outneg3.csv");
 
-            uint32_t *colors = new uint32_t[width * height];
-            uint8_t *images = new uint8_t[width * height * 3];
+            uint32_t *colors = new uint32_t[width * height]();
+            uint8_t *images = new uint8_t[width * height * 3]();
 
             srand(555);
 
@@ -408,7 +413,7 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        auto boundaries = find_boundaries(q, label_buffer, label_sizes_buffer, points_buffer, blob_labels_buffer, width, height,
+        auto boundaries = find_boundaries(q, label_buffer, label_sizes_buffer, points_buffer, blob_labels_buffer, label_compacter_buffer, width, height,
                                           {segment, zero_points, fill_blob_labels});
         boundaries.wait();
 
@@ -421,7 +426,7 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[width * height * 4]();
-            auto blob_labels_out = new uint64_t[width * height * 4]();
+            auto blob_labels_out = new uint32_t[width * height * 4]();
             q.copy(points_buffer, points_out, width * height * 4, boundaries);
             q.copy(blob_labels_buffer, blob_labels_out, width * height * 4, boundaries);
             q.wait();
@@ -485,7 +490,7 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[width * height * 4]();
-            auto blob_labels_out = new uint64_t[width * height * 4]();
+            auto blob_labels_out = new uint32_t[width * height * 4]();
             q.copy(compacted_points, points_out, width * height * 4);
             q.copy(compacted_blob_labels, blob_labels_out, width * height * 4);
             q.wait();
@@ -526,7 +531,7 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[compacted_points_count]();
-            auto blob_labels_out = new uint64_t[compacted_points_count]();
+            auto blob_labels_out = new uint32_t[compacted_points_count]();
             q.copy(compacted_points, points_out, compacted_points_count);
             q.copy(compacted_blob_labels, blob_labels_out, compacted_points_count);
             q.wait();
