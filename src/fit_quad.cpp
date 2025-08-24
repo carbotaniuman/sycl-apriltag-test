@@ -51,7 +51,7 @@ void fit_line(LineFitPoint moment, size_t num_in_moment, float *line_params,
     
     // This hypot is now scaled by (4 * W^2) over
     // the real value.
-    float sdist = std::hypotf(Csxx - Csyy, 2 * Csxy);
+    float sdist = sycl::hypot(static_cast<float>(Csxx - Csyy), static_cast<float>(2 * Csxy));
     // We want half of the value, so divide by the correction factor
     // and then divide by a further 2.
     float eig_err = (Csxx + Csyy - sdist) / (correction_factor * 2);
@@ -85,7 +85,7 @@ void fit_line(LineFitPoint moment, size_t num_in_moment, float *line_params,
         line_params[0] = static_cast<float>(moment.Mx) / static_cast<float>(moment.W * 2);
         line_params[1] = static_cast<float>(moment.My) / static_cast<float>(moment.W * 2);
 
-        float length = std::hypotf(nx, ny);
+        float length = sycl::hypot(nx, ny);
         if (std::fabs(length) < 1e-12) {
             line_params[2] = 0;
             line_params[3] = 0;

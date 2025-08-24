@@ -1,41 +1,165 @@
+#include <iostream>
 #include <sycl/sycl.hpp>
 
-#include <iostream>
+constexpr auto numWorkItems = 6;
+constexpr auto dataSize = 41;
 
-template <size_t N> class Foo {
-    static constexpr std::array<std::array<int, N>, 2> DATA = {
-        std::array{0, 100, 200, 300}, std::array{0, 1001, 2002, 3003}};
+void print(const uint32_t* const data) {
+	for (auto i = 0; i < dataSize; i++) {
+		std::cout << data[i] << ", ";
+	}
+	std::cout << "\n";
+}
 
-public:
-    static int lookup(size_t n) {
-        auto cur = DATA[(n / 4) % 2];
-        return cur[n % 4];
-    }
-};
+auto selector = sycl::gpu_selector_v;
+using op_type = sycl::multiplies<uint32_t>;
+auto op = op_type{};
+auto identity = sycl::known_identity_v<op_type, uint32_t>;
 
-int main(int argc, char *argv[]) {
-    sycl::queue q;
-    if (argc == 1) {
-        q = sycl::queue{sycl::cpu_selector_v,
-                        sycl::property::queue::in_order{}};
-    } else {
-        q = sycl::queue{sycl::gpu_selector_v,
-                        sycl::property::queue::in_order{}};
-    }
+void fill_data(uint32_t* first, size_t size) {
+	for (size_t i = 0; i < size; i++) {
+		if (i % 4 == 0) {
+			first[i] = 2;
+		} else {
+			first[i] = 1;
+		}
+	}
+}
 
-    std::cout << "Running on "
-              << q.get_device().get_info<sycl::info::device::name>()
+void foo() {
+	sycl::queue queue{selector};
+	std::cout << "Running on "
+              << queue.get_device().get_info<sycl::info::device::name>()
               << std::endl;
 
-    int *data = sycl::malloc_device<int>(1024, q);
-    q.parallel_for(sycl::range{1024}, [=](auto idx) {
-         const auto &foo = Foo<4>::lookup(idx);
-         data[idx] = idx + foo;
-     }).wait();
+	auto* const data = sycl::malloc_shared<uint32_t>(dataSize, queue);
+	fill_data(data, dataSize);
 
-    std::vector<int> result(1024);
-    q.memcpy(result.data(), data, result.size()).wait();
-    for (int i = 0; i < 8; ++i) {
-        std::cout << result[i] << std::endl;
+	std::cout << "Pre-scan Acpp: "; print(data);
+
+	std::vector<uint32_t> test(dataSize);
+    fill_data(test.data(), dataSize);
+
+	std::cout << "Pre-scan Stdl: "; print(test.data());
+
+	std::inclusive_scan(
+		test.begin(),
+		test.end(),
+		test.begin(),
+        op,
+		identity
+	);
+
+	queue.parallel_for(sycl::nd_range<1>{numWorkItems, numWorkItems},
+		[=](const sycl::nd_item<1>& item) {
+			sycl::joint_inclusive_scan(
+				item.get_sub_group(),
+				data,
+				data + dataSize,
+				data,
+                op
+			);
+		}
+	);
+
+	queue.wait();
+
+	std::cout << "Post-scan Acpp: "; print(data);
+	std::cout << "Post-scan Stdl: "; print(test.data());
+
+    queue.fill(data, uint32_t{1}, dataSize);
+	queue.wait();
+
+    queue.parallel_for(sycl::nd_range<1>{numWorkItems, numWorkItems},
+		[=](const sycl::nd_item<1>& item) {
+            auto ret = sycl::inclusive_scan_over_group(
+                item.get_sub_group(),
+                data[item.get_local_linear_id()],
+                op
+            );
+            data[item.get_local_linear_id()] = ret;
+		}
+	);
+    queue.wait();
+    std::cout << "Over-grup Acpp: "; print(test.data());
+
+	sycl::free(data, queue);
+}
+
+void bar() {
+	sycl::queue queue{selector};
+	std::cout << "Running on "
+              << queue.get_device().get_info<sycl::info::device::name>()
+              << std::endl;
+
+	auto* const data = sycl::malloc_shared<uint32_t>(dataSize, queue);
+	fill_data(data, dataSize);
+
+	std::cout << "Pre-scan Acpp: "; print(data);
+
+	std::vector<uint32_t> test(dataSize);
+    fill_data(test.data(), dataSize);
+
+	std::cout << "Pre-scan Stdl: "; print(test.data());
+
+	std::exclusive_scan(
+		test.begin(),
+		test.end(),
+		test.begin(),
+		identity,
+        op
+	);
+
+	queue.parallel_for(sycl::nd_range<1>{numWorkItems, numWorkItems},
+		[=](const sycl::nd_item<1>& item) {
+			sycl::joint_exclusive_scan(
+				item.get_sub_group(),
+				data,
+				data + dataSize,
+				data,
+				op
+			);
+		}
+	);
+
+	queue.wait();
+
+	std::cout << "Post-scan Acpp: "; print(data);
+	std::cout << "Post-scan Stdl: "; print(test.data());
+
+    queue.fill(data, uint32_t{1}, dataSize);
+	queue.wait();
+
+    queue.parallel_for(sycl::nd_range<1>{numWorkItems, numWorkItems},
+		[=](const sycl::nd_item<1>& item) {
+            auto ret = sycl::exclusive_scan_over_group(
+                item.get_sub_group(),
+                data[item.get_local_linear_id()],
+                op
+            );
+            data[item.get_local_linear_id()] = ret;
+		}
+	);
+    queue.wait();
+    std::cout << "Over-grup Acpp: "; print(test.data());
+
+	sycl::free(data, queue);
+}
+
+int main() {
+	for (auto platform : sycl::platform::get_platforms())
+    {
+        std::cout << "Platform: "
+                  << platform.get_info<sycl::info::platform::name>()
+                  << std::endl;
+
+        for (auto device : platform.get_devices())
+        {
+            std::cout << "\tDevice: "
+                      << device.get_info<sycl::info::device::name>()
+                      << std::endl;
+        }
     }
+    foo();
+    bar();
 }

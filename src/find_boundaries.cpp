@@ -10,7 +10,7 @@
 
 sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                             const uint32_t *sizes, BoundaryPoint *points,
-                            uint32_t *blob_labels, uint64_t *compacter_buffer,
+                            uint64_t *compacter_buffer,
                             size_t width, size_t height,
                             const std::vector<sycl::event> &deps) {
     constexpr size_t block_height = 8;
@@ -100,6 +100,7 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                             sizes[test_label] < 25;
 
                         BoundaryPoint maybe{
+                            0,
                             pack_half_pixel(x, half_pixel),
                             // Really I want a sycl::select but that's not
                             // supported.
@@ -121,8 +122,8 @@ sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                             width * height * point_offset + linear_id;
 
                         if (!local_label_too_small && !test_label_too_small) {
+                            maybe.blob_label = compacter.lookup<sycl::memory_scope::device>(extended_blob_label);
                             points[output_index] = maybe;
-                            blob_labels[output_index] = compacter.lookup<sycl::memory_scope::device>(extended_blob_label);
                         }
                     }
                 };

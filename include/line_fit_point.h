@@ -69,7 +69,7 @@ inline LineFitPoint compute_initial_linefit(ClusterPoint p, uint32_t width,
         // between them is 0.03162745, which is dwarved by the error
         // introduced by discarding the fractional portion.
         W += static_cast<int64_t>(
-            std::hypotf(grad_x, grad_y)
+            std::hypot(static_cast<float>(grad_x), static_cast<float>(grad_y))
         );
     }
 
