@@ -261,7 +261,7 @@ int main(int argc, char *argv[]) {
     int width, height, comp;
 
     stbi_uc *data =
-        stbi_load("../decimate2.png", &width, &height, &comp, STBI_grey);
+        stbi_load("../decimate4.png", &width, &height, &comp, STBI_grey);
     fprintf(stdout, "width: %d, height: %d, comp: %d\n", width, height, comp);
 
     auto grayscale_buffer = sycl::malloc_device<uint8_t>(width * height, q);
