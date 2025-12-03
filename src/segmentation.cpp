@@ -250,7 +250,7 @@ sycl::event image_segmentation(sycl::queue &q, const uint8_t *thresholded,
             handle_pixel_test(-1, -1, 0, BkeBitmap::MUST_UNION_P_255);
             handle_pixel_test(-1, 0, 1, BkeBitmap::MUST_UNION_Q_255);
             handle_pixel_test(-1, 1, 2, BkeBitmap::MUST_UNION_Q_255);
-            handle_pixel_test(-1, 2, 3, BkeBitmap::MUST_UNION_R_255);
+            handle_pixel_test(-1, 1, 3, BkeBitmap::MUST_UNION_R_255);
             handle_pixel_test(0, -1, 4, BkeBitmap::MUST_UNION_S_255);
             handle_pixel_test(1, -1, 8, BkeBitmap::MUST_UNION_S_255);
 

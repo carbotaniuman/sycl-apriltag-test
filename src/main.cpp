@@ -236,8 +236,8 @@ void dumpClusterPointsToCSV(const ClusterPoint *boundaryPoints, size_t size,
 }
 
 int main(int argc, char *argv[]) {
-    bool debug = false;
-    bool prog = false;
+    bool debug = getenv("DEBUG") != nullptr;
+    bool prog = getenv("PROG") != nullptr;
     sycl::queue q;
     if (argc == 1) {
         q = sycl::queue{sycl::cpu_selector_v,
@@ -304,7 +304,7 @@ int main(int argc, char *argv[]) {
         sycl::malloc_device<PeakExtents>(width * height * 4, q);
     auto output_quads = sycl::malloc_device<FittedQuad>(width * height, q);
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 20; i++) {
         auto zero_sizes =
             q.memset(label_sizes_buffer, 0, sizes_elems * sizeof(uint32_t));
         auto zero_points = q.memset(points_buffer, 0,
