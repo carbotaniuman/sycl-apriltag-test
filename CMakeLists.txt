@@ -14,7 +14,7 @@ include(FetchContent)
 FetchContent_Declare(
   apriltag
   GIT_REPOSITORY https://github.com/carbotaniuman/apriltag.git
-  GIT_TAG        a8b2f9639765162f2ac12a608d785ceb97deee6b
+  GIT_TAG        04ebca938bb16bd453965ddfdf30554745245045
 )
 FetchContent_MakeAvailable(apriltag)
 
