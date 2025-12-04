@@ -9,7 +9,7 @@
 
 sycl::event find_boundaries(sycl::queue &q, const uint32_t *labels,
                             const uint32_t *sizes, BoundaryPoint *points,
-                            uint64_t *compacter_buffer,
+                            uint16_t *blob_indexes, uint64_t *compacter_buffer,
                             size_t width, size_t height,
                             const std::vector<sycl::event> &deps = {});
 

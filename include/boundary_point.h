@@ -30,7 +30,6 @@ inline uint16_t pack_half_pixel(uint16_t coord, HalfPixel pixel) {
 // The struct has both 0 and UINT64_MAX as invalid states,
 // depending on which one fits better.
 struct BoundaryPoint {
-    uint32_t blob_label;
     // x is packed as [HALF_PIXEL : 2, VALUE : 14]
     uint16_t packed_x;
     // x is packed as [COLOR_DIRECTION : 1, unused : 1, VALUE : 14]
@@ -95,7 +94,7 @@ struct BoundaryPoint {
 
     int16_t gy() const { return is_black_to_white() ? dy() : -dy(); }
 };
-static_assert(sizeof(BoundaryPoint) == 8);
+static_assert(sizeof(BoundaryPoint) == 4);
 
 // The struct has both 0 and UINT64_MAX as invalid states,
 // depending on which one fits better.

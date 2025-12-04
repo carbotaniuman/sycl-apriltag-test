@@ -11,7 +11,7 @@ public:
     // The 0th entry will never be be initialized.
     // Elems must be a power of 2
     LabelCompacter(uint64_t *buffer)
-        : m_buffer(buffer), m_elems(1 << 20) {}
+        : m_buffer(buffer), m_elems(1 << 16) {}
 
 
     // Adds the value given to the slot with the given key.

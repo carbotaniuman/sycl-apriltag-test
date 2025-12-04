@@ -179,7 +179,7 @@ void dumpExtentLikeToCSV(const ExtentLike *extents, size_t size,
     std::cout << "CSV file '" << filename << "' has been written.\n";
 }
 
-void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints, size_t size,
+void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints, uint16_t *labels, size_t size,
                              const std::string &filename) {
     // Open the CSV file for writing
     std::ofstream csvFile(filename);
@@ -196,8 +196,9 @@ void dumpBoundaryPointsToCSV(const BoundaryPoint *boundaryPoints, size_t size,
     // Loop over the array and write each point to the CSV
     for (size_t i = 0; i < size; ++i) {
         const auto &point = boundaryPoints[i];
+        const auto &label = labels[i];
         csvFile << point.x_value() << "," << point.y_value() << ","
-                << point.blob_label << ","
+                << label << ","
                 << point.is_black_to_white() << "," << point.dx() << ","
                 << point.dy() << "\n";
     }
@@ -276,10 +277,14 @@ int main(int argc, char *argv[]) {
     auto label_sizes_buffer = sycl::malloc_device<uint32_t>(width * height, q);
     auto points_buffer =
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
+    auto point_labels_buffer =
+        sycl::malloc_device<uint16_t>(width * height * 4, q);
     auto label_compacter_buffer =
         sycl::malloc_device<uint64_t>(1 << 20, q);
     auto compacted_points =
         sycl::malloc_device<BoundaryPoint>(width * height * 4, q);
+    auto compacted_point_labels =
+        sycl::malloc_device<uint16_t>(width * height * 4, q);
     size_t sizes_elems = 1 << 16;
     auto keys_trash = sycl::malloc_device<uint32_t>(sizes_elems, q);
     auto values_buffer = sycl::malloc_device<ClusterBounds>(sizes_elems, q);
@@ -309,6 +314,8 @@ int main(int argc, char *argv[]) {
             q.memset(label_sizes_buffer, 0, sizes_elems * sizeof(uint32_t));
         auto zero_points = q.memset(points_buffer, 0,
                                     width * height * 4 * sizeof(BoundaryPoint));
+        auto zero_point_labels = q.memset(point_labels_buffer, 0,
+                                    width * height * 4 * sizeof(uint16_t));
         auto zero_label_compacter = q.memset(label_compacter_buffer, 0,
                                     (1 << 20) * sizeof(uint64_t));
         auto zero_corners = q.memset(found_corners_buffer, 0,
@@ -406,7 +413,7 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        auto boundaries = find_boundaries(q, label_buffer, label_sizes_buffer, points_buffer, label_compacter_buffer, width, height,
+        auto boundaries = find_boundaries(q, label_buffer, label_sizes_buffer, points_buffer, point_labels_buffer, label_compacter_buffer, width, height,
                                           {segment, zero_points});
         boundaries.wait();
 
@@ -419,10 +426,12 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[width * height * 4]();
+            auto point_labels_out = new uint16_t[width * height * 4]();
             q.copy(points_buffer, points_out, width * height * 4, boundaries);
+            q.copy(point_labels_buffer, point_labels_out, width * height * 4, boundaries);
             q.wait();
 
-            dumpBoundaryPointsToCSV(points_out, width * height * 4,
+            dumpBoundaryPointsToCSV(points_out, point_labels_out, width * height * 4,
                                     "out0.csv");
 
             size_t present = 0;
@@ -446,7 +455,7 @@ int main(int argc, char *argv[]) {
 
                 auto x = points_out[i].x_value();
                 auto y = points_out[i].y_value();
-                auto label = points_out[i].blob_label;
+                auto label = point_labels_out[i];
 
                 // std::cout << points_out[i].packed_x << " " << points_out[i].packed_y << std::endl;
 
@@ -460,14 +469,17 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        auto compacted_points_end = oneapi::dpl::copy_if(
-            policy_e, points_buffer, points_buffer + width * height * 4,
-            compacted_points, [](const BoundaryPoint& p) {
+        auto compacted_group = oneapi::dpl::make_zip_iterator(points_buffer, point_labels_buffer);
+        auto compacted_group_start = oneapi::dpl::make_zip_iterator(compacted_points, compacted_point_labels);
+        auto compacted_group_end = oneapi::dpl::copy_if(
+            policy_e, compacted_group, compacted_group + width * height * 4,
+            compacted_group_start, [](const auto& t) {
+                const BoundaryPoint& p = std::get<0>(t);
                 return p.packed_x != 0 && p.packed_y != 0;
             });
 
         size_t compacted_points_count =
-            std::distance(compacted_points, compacted_points_end);
+            std::distance(compacted_group_start, compacted_group_end);
 
         if (prog) {
             auto duration =
@@ -478,9 +490,11 @@ int main(int argc, char *argv[]) {
 
         if (debug) {
             auto points_out = new BoundaryPoint[width * height * 4]();
+            auto point_labels_out = new uint16_t[width * height * 4]();
             q.copy(compacted_points, points_out, width * height * 4);
+            q.copy(compacted_point_labels, point_labels_out, width * height * 4);
             q.wait();
-            dumpBoundaryPointsToCSV(points_out, compacted_points_count,
+            dumpBoundaryPointsToCSV(points_out, point_labels_out, compacted_points_count,
                                     "out1.csv");
 
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
@@ -491,7 +505,7 @@ int main(int argc, char *argv[]) {
 
                 auto x = points_out[i].x_value();
                 auto y = points_out[i].y_value();
-                auto label = points_out[i].blob_label;
+                auto label = point_labels_out[i];
 
                 cluster_image[(y * width + x) * 3 + 0] = 0;
                 cluster_image[(y * width + x) * 3 + 1] = 0;
@@ -503,13 +517,14 @@ int main(int argc, char *argv[]) {
                            width * 3);
         }
 
-        oneapi::dpl::sort(policy_e,
-                          compacted_points,
-                          compacted_points + compacted_points_count,
-                          [](const BoundaryPoint &left, const BoundaryPoint &right) {
-                              return left.blob_label < right.blob_label;
-                          });
-
+        // oneapi::dpl::sort(policy_e,
+        //                   reinterpret_cast<uint64_t*>(compacted_points),
+        //                   reinterpret_cast<uint64_t*>(compacted_points) + compacted_points_count,
+        //                   std::less<>{});
+        oneapi::dpl::sort_by_key(policy_e, compacted_point_labels,
+                                 compacted_point_labels + compacted_points_count,
+                                 compacted_points,
+                                 std::less<uint32_t>{});
         if (prog) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
@@ -518,11 +533,13 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) {
-            auto points_out = new BoundaryPoint[compacted_points_count]();
-            q.copy(compacted_points, points_out, compacted_points_count);
+            auto points_out = new BoundaryPoint[width * height * 4]();
+            auto point_labels_out = new uint16_t[width * height * 4]();
+            q.copy(compacted_points, points_out, width * height * 4);
+            q.copy(compacted_point_labels, point_labels_out, width * height * 4);
             q.wait();
 
-            dumpBoundaryPointsToCSV(points_out, compacted_points_count,
+            dumpBoundaryPointsToCSV(points_out, point_labels_out, compacted_points_count,
                                     "out2.csv");
 
             uint8_t *cluster_image = new uint8_t[width * height * 3]();
@@ -533,7 +550,7 @@ int main(int argc, char *argv[]) {
                     break;
                 }
 
-                uint32_t label = points_out[i].blob_label;
+                uint32_t label = point_labels_out[i];
 
                 uint32_t color = 0;
                 if (auto found = vs.find(label); found != vs.end()) {
@@ -569,10 +586,10 @@ int main(int argc, char *argv[]) {
 
         auto values_start = reinterpret_cast<sycl::vec<int64_t, 4>*>(values_buffer);
         auto [keys_end, values_end] = oneapi::dpl::reduce_by_segment(
-            policy_e, compacted_points, compacted_points + compacted_points_count,
+            policy_e, compacted_point_labels, compacted_point_labels + compacted_points_count,
             transform_values, oneapi::dpl::discard_iterator(), values_start,
-            [](const BoundaryPoint &left, const BoundaryPoint &right) {
-                return left.blob_label == right.blob_label;
+            [](uint32_t left, uint32_t right) {
+                return left == right;
             },
             [](const auto &left, const auto &right) {
                 return sycl::bit_cast<sycl::vec<int64_t, 4>>(reduce_bounds(sycl::bit_cast<ClusterBounds>(left), sycl::bit_cast<ClusterBounds>(right)));
