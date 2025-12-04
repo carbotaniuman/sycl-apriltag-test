@@ -524,7 +524,9 @@ int main(int argc, char *argv[]) {
         oneapi::dpl::sort_by_key(policy_e, compacted_point_labels,
                                  compacted_point_labels + compacted_points_count,
                                  compacted_points,
-                                 std::less<uint32_t>{});
+                                 [](uint16_t left, uint16_t right) {
+                                     return left < right;
+                                 });
         if (prog) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
