@@ -336,7 +336,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "1: " << duration.count() << std::endl;
+            std::cout << "adaptive threshold: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -359,7 +359,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "2: " << duration.count() << std::endl;
+            std::cout << "image segmentation: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -421,7 +421,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "3: " << duration.count() << std::endl;
+            std::cout << "find boundaries: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -485,7 +485,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "4: " << duration.count() << std::endl;
+            std::cout << "filter valid boundaries: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -531,7 +531,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "5: " << duration.count() << std::endl;
+            std::cout << "sort boundaries: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -601,7 +601,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "6: " << duration.count() << std::endl;
+            std::cout << "calculate point data: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -625,7 +625,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "6b: " << duration.count() << std::endl;
+            std::cout << "filtered blobs: " << duration.count() << std::endl;
         }
 
         size_t filtered_values_distance =
@@ -691,7 +691,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "7: " << duration.count() << std::endl;
+            std::cout << "get cluster points: " << duration.count() << std::endl;
         }
 
         auto filtered_points_count =
@@ -733,7 +733,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "8: " << duration.count() << std::endl;
+            std::cout << "find corners: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -766,7 +766,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "9: " << duration.count() << std::endl;
+            std::cout << "sort corners: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -791,7 +791,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "10: " << duration.count() << std::endl;
+            std::cout << "initial line fit: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -817,7 +817,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "11: " << duration.count() << std::endl;
+            std::cout << "inclusive scan line data: " << duration.count() << std::endl;
         }
 
         auto line_fit_points_count = std::distance(asdasd_begin, asdasd_end);
@@ -839,7 +839,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "12: " << duration.count() << std::endl;
+            std::cout << "fit lines: " << duration.count() << std::endl;
         }
 
         auto compacted_corners_end = oneapi::dpl::copy_if(
@@ -853,7 +853,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "13: " << duration.count() << std::endl;
+            std::cout << "get valid corners: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -880,7 +880,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "14: " << duration.count() << std::endl;
+            std::cout << "sort corners: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -913,7 +913,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "15: " << duration.count() << std::endl;
+            std::cout << "reduce corners: " << duration.count() << std::endl;
         }
 
         size_t cluster_data_new_count =
@@ -986,7 +986,7 @@ int main(int argc, char *argv[]) {
             auto duration =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::high_resolution_clock::now() - start);
-            std::cout << "16: " << duration.count() << std::endl;
+            std::cout << "fit quads: " << duration.count() << std::endl;
         }
 
         if (debug) {
@@ -1038,7 +1038,7 @@ int main(int argc, char *argv[]) {
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration =
             std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-        std::cout << duration.count() << std::endl;
+        std::cout << "total time: " << duration.count() << std::endl;
     }
 }
 
